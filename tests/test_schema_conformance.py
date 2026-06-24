@@ -91,7 +91,15 @@ def test_amp_measurements_partial_success_contains_failed_refs(server) -> None:
 
 def test_reference_outputs_never_include_raw_spectrum_arrays(server) -> None:
     out = server.getRPDSpectrumMeasurements("RPD-1", "P1")
-    text = str(out)
-    assert "maxHold" not in text
-    assert "minHold" not in text
-    assert "average" not in text
+    forbidden = {"rawSpectrum", "maxHold", "minHold", "average"}
+
+    def _assert_no_forbidden_keys(value):
+        if isinstance(value, dict):
+            assert forbidden.isdisjoint(value.keys())
+            for v in value.values():
+                _assert_no_forbidden_keys(v)
+        elif isinstance(value, list):
+            for item in value:
+                _assert_no_forbidden_keys(item)
+
+    _assert_no_forbidden_keys(out)

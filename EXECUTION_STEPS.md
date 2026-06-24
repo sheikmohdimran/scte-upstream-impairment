@@ -66,5 +66,5 @@ LangGraph + SLM; needs `SLM_BASE_URL`/`SLM_MODEL`).
   - `docs/architecture/contract-and-data-surfaces.md`
   - `docs/operations/open-decisions.md`
 - Validation evidence on this branch:
-  - `/home/sdp/vllm-env/bin/python -m pytest tests/test_readme_consolidation.py tests/test_schema_conformance.py tests/test_localizer.py tests/test_agent_e2e.py -q`
+  - `python -m pytest tests/test_readme_consolidation.py tests/test_schema_conformance.py tests/test_localizer.py tests/test_agent_e2e.py -q`
   - Result: 29 passed.

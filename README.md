@@ -84,7 +84,7 @@ Decision tracker: `docs/operations/open-decisions.md`.
 ## Demo Quickstart
 
 ```bash
-cd /home/sdp/wrkdir/scte/upstream-impairment
+cd upstream-impairment
 
 make install
 make test

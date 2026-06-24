@@ -1,4 +1,4 @@
-PY := /home/sdp/vllm-env/bin/python
+PY ?= python3
 
 .PHONY: test demo agent-demo install install-agent lint ci
 

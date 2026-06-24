@@ -30,5 +30,6 @@ src/uil/sim/spectrum_simulator.py
 tests/test_agent_e2e.py
 tests/test_langgraph_agent.py
 tests/test_localizer.py
+tests/test_readme_consolidation.py
 tests/test_schema_conformance.py
 tests/test_simulator.py

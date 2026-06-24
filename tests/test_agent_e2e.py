@@ -57,6 +57,9 @@ def test_measurement_unavailable_once_retries_and_completes() -> None:
     res = Orchestrator(server, "measurement-unavailable", max_remeasure=1).run()
     rpd_calls = [c for c in res.trace.calls if c.tool == "getRPDSpectrumMeasurements"]
     assert len(rpd_calls) == 2
+    assert rpd_calls[0].outcome == "error"
+    assert rpd_calls[0].result.get("errorCode") == "MEASUREMENT_UNAVAILABLE"
+    assert rpd_calls[1].outcome == "success"
     assert res.status in {"localized", "low_confidence"}
 
 
