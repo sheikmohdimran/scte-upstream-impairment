@@ -28,6 +28,7 @@ def _now() -> str:
 class FaultInjection:
     rpd_unreachable: bool = False
     rpd_stale_only: bool = False
+    rpd_measurement_unavailable_once: bool = False
     topology_unavailable: bool = False
     amp_failed_ports: set[str] = field(default_factory=set)  # ampIds that fail to measure
     analyze_fails: bool = False
@@ -50,14 +51,18 @@ class MockMcpServer:
         self.clf = RuleClassifier()
         self.localizer = GraphLocalizer()
         self._labels = {a["ampId"]: ImpairmentLabel(a.get("label", "Clean")) for a in scenario.amps}
+        self._rpd_measurement_attempts = 0
 
     # ---- Tool 1 ---------------------------------------------------------
     def getRPDSpectrumMeasurements(self, rpdId: str, portId: str, numBins: int = 256,
                                    startFrequencyHz: int = 5_000_000, stopFrequencyHz: int = 85_000_000) -> dict:
+        self._rpd_measurement_attempts += 1
         if self.scn.faults.rpd_unreachable:
             return {"status": "error", "errorCode": "DEVICE_UNREACHABLE", "message": f"{rpdId}/{portId} unreachable"}
         if self.scn.faults.rpd_stale_only:
             return {"status": "error", "errorCode": "STALE_DATA_ONLY"}
+        if self.scn.faults.rpd_measurement_unavailable_once and self._rpd_measurement_attempts == 1:
+            return {"status": "error", "errorCode": "MEASUREMENT_UNAVAILABLE"}
         spectrum = self.sim.generate(self.scn.rpd_label)
         ts = _now()
         meas_id = self.store.put("meas", {

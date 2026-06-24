@@ -57,3 +57,14 @@ LangGraph + SLM; needs `SLM_BASE_URL`/`SLM_MODEL`).
 - Trigger contract (SNMP trap / Kafka) (Randy) → Phase 4.
 - `impairmentType` selection rule for localize step 6 (Randy/Irene).
 - CNN reuse details / sample captures (Irene + Bhaskar) → replaces Step 4.
+
+## Repo publication and verification status
+- Git worktree branch for implementation: `impl-plan-2026-06-24`.
+- GitHub org creation attempted for `Intel-Sandbox/scte-upstream-impairment` and blocked by org IP allow-list (HTTP 403).
+- Fallback publication target used: `sheikmohdimran/scte-upstream-impairment` (private) to keep execution unblocked.
+- Consolidated repository documentation completed in `README.md` plus:
+  - `docs/architecture/contract-and-data-surfaces.md`
+  - `docs/operations/open-decisions.md`
+- Validation evidence on this branch:
+  - `/home/sdp/vllm-env/bin/python -m pytest tests/test_readme_consolidation.py tests/test_schema_conformance.py tests/test_localizer.py tests/test_agent_e2e.py -q`
+  - Result: 29 passed.

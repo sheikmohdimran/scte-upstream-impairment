@@ -19,11 +19,13 @@ def build_handoff_summary(
     localization: Optional[dict[str, Any]] = None,
 ) -> str:
     lines = [
-        f"# Diagnosis Summary — {scenario}",
+        "## Diagnosis Summary",
         "",
+        f"- scenario: {scenario}",
         f"**Escalation reason:** {reason}",
         "",
-        "## Tool-call timeline",
+        "## Evidence",
+        "### Tool-call timeline",
     ]
     for c in trace.calls:
         lines.append(f"- Step {c.step} `{c.tool}` → **{c.outcome}** — {c.decision}")
@@ -31,7 +33,7 @@ def build_handoff_summary(
     if localization:
         lines += [
             "",
-            "## Localization (partial / low-confidence)",
+            "### Localization (partial / low-confidence)",
             f"- status: `{localization.get('localizationStatus', 'n/a')}`",
             f"- impairmentType: `{localization.get('impairmentType', 'n/a')}`",
             f"- confidence: {localization.get('confidence', 'n/a')}",
@@ -46,7 +48,7 @@ def build_handoff_summary(
 
     lines += [
         "",
-        "## Recommended human action",
+        "## Recommended Next Action",
         "Review the conflicting/low-confidence evidence above and dispatch a technician or "
         "trigger a targeted re-measurement of the listed devices.",
     ]

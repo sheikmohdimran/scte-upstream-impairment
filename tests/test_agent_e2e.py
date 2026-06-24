@@ -52,6 +52,22 @@ def test_stale_rpd_triggers_remeasure_then_recovers_or_escalates() -> None:
     assert res.status == "failed"
 
 
+def test_measurement_unavailable_once_retries_and_completes() -> None:
+    server = MockMcpServer(_scenario(rpd_measurement_unavailable_once=True))
+    res = Orchestrator(server, "measurement-unavailable", max_remeasure=1).run()
+    rpd_calls = [c for c in res.trace.calls if c.tool == "getRPDSpectrumMeasurements"]
+    assert len(rpd_calls) == 2
+    assert res.status in {"localized", "low_confidence"}
+
+
+def test_handoff_contains_required_sections() -> None:
+    res = Orchestrator(MockMcpServer(_scenario(rpd_unreachable=True)), "handoff-sections").run()
+    assert res.handoff_markdown is not None
+    assert "## Diagnosis Summary" in res.handoff_markdown
+    assert "## Evidence" in res.handoff_markdown
+    assert "## Recommended Next Action" in res.handoff_markdown
+
+
 def test_trace_is_serializable_and_holds_only_handles() -> None:
     res = Orchestrator(MockMcpServer(_scenario()), "trace").run()
     js = res.trace.to_jsonl()

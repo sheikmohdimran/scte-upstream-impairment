@@ -61,3 +61,16 @@ def test_conflicting_labels_escalate() -> None:
     assert res.localizationStatus == "low_confidence"
     assert res.recommendedNextAction and res.recommendedNextAction.action == "escalate"
     assert {d.ampId for d in res.supportingDevices} == {"A2", "A3"}
+
+
+def test_flat_topology_without_parent_links_is_handled() -> None:
+    flat = Topology.from_amp_list("RPD-1", "P1", [
+        {"ampId": "A1", "distanceFromRpdMeters": 100},
+        {"ampId": "A2", "distanceFromRpdMeters": 200},
+    ])
+    classifications = [
+        _amp_class("A1", "clean"),
+        _amp_class("A2", "impaired"),
+    ]
+    res = GraphLocalizer().localize("RPD-1", "P1", ImpairmentLabel.CPD, classifications, flat)
+    assert res.localizationStatus in {"localized", "low_confidence"}

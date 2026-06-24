@@ -1,6 +1,6 @@
 PY := /home/sdp/vllm-env/bin/python
 
-.PHONY: test demo agent-demo install install-agent lint
+.PHONY: test demo agent-demo install install-agent lint ci
 
 install:
 	$(PY) -m pip install -e .[dev]
@@ -18,3 +18,7 @@ demo:
 # OpenAI-compatible endpoint (local llama.cpp / vLLM / Ollama shim, or hosted).
 agent-demo:
 	PYTHONPATH=src $(PY) -m uil.agent.langgraph_agent
+
+ci:
+	$(MAKE) test
+	$(MAKE) demo

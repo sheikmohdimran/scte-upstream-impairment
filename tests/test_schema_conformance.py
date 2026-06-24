@@ -75,3 +75,23 @@ def test_analyze_tool_success_output_conforms(server) -> None:
     rpd = server.getRPDSpectrumMeasurements("RPD-1", "P1")
     out = server.analyzeSpectrumMeasurements(measurementRefs=[rpd["measurementRef"]])
     Draft202012Validator(schema, resolver=_defs_resolver()).validate(out)
+
+
+def test_amp_measurements_partial_success_contains_failed_refs(server) -> None:
+    schema = _load(SCHEMA_DIR / "reference" / "getAmpSpectrumMeasurements.schema.json")["outputSchema"]
+    amps = server.getAllAmpsInSegment("RPD-1", "P1")
+    # Force a partial-success path by failing one known amp.
+    server.scn.faults.amp_failed_ports = {"A4"}
+    out = server.getAmpSpectrumMeasurements(ampListRef=amps["ampListRef"])
+    Draft202012Validator(schema, resolver=_defs_resolver()).validate(out)
+    assert out["status"] == "partial_success"
+    assert out["failedCount"] == 1
+    assert "failedDevicesRef" in out
+
+
+def test_reference_outputs_never_include_raw_spectrum_arrays(server) -> None:
+    out = server.getRPDSpectrumMeasurements("RPD-1", "P1")
+    text = str(out)
+    assert "maxHold" not in text
+    assert "minHold" not in text
+    assert "average" not in text
