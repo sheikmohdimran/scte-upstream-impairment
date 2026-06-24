@@ -1,0 +1,29 @@
+# PROVISIONAL CPD / fault-injection parameters for the synthetic simulator.
+#
+# These are placeholders so the pipeline runs end-to-end. The real numbers
+# (floor-rise margin, discrete-product structure, band extent) must be confirmed
+# with Irene/Bhaskar — see EXECUTION_STEPS.md "Open dependencies".
+
+clean:
+  noise_floor_dbmv: -40.0     # nominal upstream noise floor
+  variance_db: 1.0            # per-bin gaussian variance
+
+cpd:
+  # CPD = raised upstream noise floor, often with discrete distortion products
+  # ("comb") spaced at the video carrier harmonics (~6 MHz in this provisional model).
+  floor_rise_db: 8.0          # how much the noise floor lifts
+  band_start_hz: 5000000
+  band_stop_hz: 42000000      # CPD typically concentrated in low upstream
+  comb_spacing_hz: 6000000    # spacing of discrete products
+  comb_peak_db: 6.0           # additional peak above the raised floor at comb teeth
+  severity_jitter_db: 1.5
+
+# Stubs for the other labels so the classifier interface is exercised.
+ingress:
+  band_start_hz: 18000000
+  band_stop_hz: 24000000
+  level_db: 12.0
+narrowband_interference:
+  center_hz: 27000000
+  level_db: 20.0
+  width_hz: 250000

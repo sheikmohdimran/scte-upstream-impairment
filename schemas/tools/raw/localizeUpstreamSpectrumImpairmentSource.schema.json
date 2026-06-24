@@ -1,0 +1,33 @@
+{
+  "name": "localizeUpstreamSpectrumImpairmentSource",
+  "description": "Raw input: the localizer receives the actual classification results inline instead of `classificationSetRefs` handles. Output is symbolic and identical to the reference doc.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "rpdId": {
+        "type": "string"
+      },
+      "portId": {
+        "type": "string"
+      },
+      "impairmentType": {
+        "$ref": "../_defs.schema.json#/$defs/impairmentLabel"
+      },
+      "classifications": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "../_defs.schema.json#/$defs/classification"
+        },
+        "description": "Actual classification results — the RPD plus every amp leg. The localizer separates RPD vs amp entries by deviceType."
+      }
+    },
+    "required": [
+      "rpdId",
+      "portId",
+      "impairmentType",
+      "classifications"
+    ],
+    "additionalProperties": false
+  }
+}

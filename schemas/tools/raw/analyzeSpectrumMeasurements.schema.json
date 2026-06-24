@@ -1,0 +1,97 @@
+{
+  "name": "analyzeSpectrumMeasurements",
+  "description": "Raw input: classify inline spectrum payloads. Output is the full inline `classifications[]` set (the reference version returns a `classificationSetRef` handle to this set).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "measurements": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "properties": {
+            "measurementId": {
+              "type": "string",
+              "description": "ID of the stored measurement; echoed into the classification."
+            },
+            "deviceType": {
+              "type": "string",
+              "enum": [
+                "RPD",
+                "AMP"
+              ]
+            },
+            "rpdId": {
+              "type": "string"
+            },
+            "portId": {
+              "type": "string"
+            },
+            "ampId": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "spectrum": {
+              "$ref": "../_defs.schema.json#/$defs/rawSpectrum"
+            }
+          },
+          "required": [
+            "measurementId",
+            "deviceType",
+            "timestamp",
+            "spectrum"
+          ]
+        }
+      }
+    },
+    "required": [
+      "measurements"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "classifications": {
+            "type": "array",
+            "items": {
+              "$ref": "../_defs.schema.json#/$defs/classification"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "classifications"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "CLASSIFICATION_FAILED",
+                  "INVALID_MEASUREMENT_REF",
+                  "MEASUREMENT_TOO_STALE",
+                  "UNSUPPORTED_MEASUREMENT_TYPE",
+                  "INSUFFICIENT_SIGNAL_QUALITY"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

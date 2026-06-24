@@ -1,0 +1,133 @@
+"""Phase 3 tests: LangGraph agent wiring + SLM-facing toolset, no live SLM required.
+
+The agent is driven by a small *scripted* tool-calling model so the full LangGraph loop runs
+deterministically offline. A real OpenAI-compatible SLM is a drop-in for the scripted model.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+
+import pytest
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+
+from uil.agent.langgraph_agent import LangGraphAgent, McpToolset, build_tools
+from uil.agent.trace import ToolCallTrace
+from uil.mcp_server.server import MockMcpServer, Scenario
+
+
+def test_toolset_surface_flows_handles(cpd_scenario: Scenario) -> None:
+    """The SLM-facing toolset moves only string handles and captures localization."""
+    server = MockMcpServer(cpd_scenario)
+    trace = ToolCallTrace(scenario="t")
+    ts = McpToolset(server, trace)
+
+    r1 = json.loads(ts.get_rpd_spectrum("RPD-1", "P1"))
+    assert r1["status"] == "success" and isinstance(r1["measurementId"], str)
+
+    r2 = json.loads(ts.analyze_spectrum(measurementIds=[r1["measurementId"]]))
+    assert r2["impairedCount"] == 1 and "CPD" in r2["classesPresent"]
+    rpd_set = r2["classificationSetRef"]
+
+    r3 = json.loads(ts.get_all_amps("RPD-1", "P1"))
+    r4 = json.loads(ts.get_amp_spectra(ampListRef=r3["ampListRef"]))
+    assert r4["status"] == "success"
+
+    r5 = json.loads(ts.analyze_spectrum(measurementSetRef=r4["measurementSetRef"]))
+    amp_set = r5["classificationSetRef"]
+
+    r6 = json.loads(ts.localize("RPD-1", "P1", "CPD", [rpd_set, amp_set]))
+    assert r6["impairmentType"] == "CPD"
+    assert r6["localizationStatus"] == "localized"
+    assert ts.last_localization == r6
+    assert len(trace.calls) == 6
+
+
+def test_build_tools_exposes_five_named_tools(cpd_scenario: Scenario) -> None:
+    ts = McpToolset(MockMcpServer(cpd_scenario), ToolCallTrace(scenario="t"))
+    tools = build_tools(ts)
+    names = {t.name for t in tools}
+    assert names == {
+        "getRPDSpectrumMeasurements",
+        "analyzeSpectrumMeasurements",
+        "getAllAmpsInSegment",
+        "getAmpSpectrumMeasurements",
+        "localizeUpstreamSpectrumImpairmentSource",
+    }
+
+
+class _ScriptedSLM(BaseChatModel):
+    """A minimal deterministic stand-in for a tool-calling SLM.
+
+    Reimplements the 6-step happy path by reading prior ToolMessages, so the LangGraph loop is
+    exercised end-to-end without a network endpoint.
+    """
+
+    @property
+    def _llm_type(self) -> str:
+        return "scripted-slm"
+
+    def bind_tools(self, tools, **kwargs):  # create_react_agent calls this
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=self._next(messages))])
+
+    @staticmethod
+    def _next(messages):
+        parsed = [(m.name, json.loads(m.content)) for m in messages if isinstance(m, ToolMessage)]
+
+        def call(name, args):
+            return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": f"c-{uuid.uuid4().hex[:8]}"}])
+
+        def last(name):
+            for n, d in reversed(parsed):
+                if n == name:
+                    return d
+            return None
+
+        n = len(parsed)
+        if n == 0:
+            return call("getRPDSpectrumMeasurements", {"rpdId": "RPD-1", "portId": "P1"})
+        if n == 1:
+            return call("analyzeSpectrumMeasurements", {"measurementIds": [last("getRPDSpectrumMeasurements")["measurementId"]]})
+        if n == 2:
+            return call("getAllAmpsInSegment", {"rpdId": "RPD-1", "portId": "P1"})
+        if n == 3:
+            return call("getAmpSpectrumMeasurements", {"ampListRef": last("getAllAmpsInSegment")["ampListRef"]})
+        if n == 4:
+            return call("analyzeSpectrumMeasurements", {"measurementSetRef": last("getAmpSpectrumMeasurements")["measurementSetRef"]})
+        if n == 5:
+            analyses = [d for nm, d in parsed if nm == "analyzeSpectrumMeasurements"]
+            imp = next((c for c in analyses[0]["classesPresent"] if c != "Clean"), "UnknownImpairment")
+            return call(
+                "localizeUpstreamSpectrumImpairmentSource",
+                {"rpdId": "RPD-1", "portId": "P1", "impairmentType": imp,
+                 "classificationSetRefs": [analyses[0]["classificationSetRef"], analyses[1]["classificationSetRef"]]},
+            )
+        loc = last("localizeUpstreamSpectrumImpairmentSource")
+        return AIMessage(
+            content=f"Localized {loc['impairmentType']} ({loc['localizationStatus']}, conf={loc['confidence']}): "
+                    f"{loc.get('likelySourceLocation', {}).get('description', 'n/a')}"
+        )
+
+
+def test_langgraph_agent_end_to_end_with_scripted_slm(cpd_scenario: Scenario) -> None:
+    pytest.importorskip("langgraph")
+    agent = LangGraphAgent(MockMcpServer(cpd_scenario), llm=_ScriptedSLM(), scenario_name="cpd-scripted")
+    result = agent.run()
+
+    assert result.trace.final_status == "localized"
+    assert result.localization and result.localization["impairmentType"] == "CPD"
+    assert [c.tool for c in result.trace.calls] == [
+        "getRPDSpectrumMeasurements",
+        "analyzeSpectrumMeasurements",
+        "getAllAmpsInSegment",
+        "getAmpSpectrumMeasurements",
+        "analyzeSpectrumMeasurements",
+        "localizeUpstreamSpectrumImpairmentSource",
+    ]
+    assert "CPD" in result.final_message

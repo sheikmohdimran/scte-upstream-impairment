@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "_defs.schema.json",
+  "title": "Upstream Impairment MCP tools \u2014 shared definitions",
+  "$defs": {
+    "impairmentLabel": {
+      "type": "string",
+      "enum": [
+        "Clean",
+        "CPD",
+        "Ingress",
+        "ImpulseNoise",
+        "WidebandNoise",
+        "NarrowbandInterference",
+        "Ripple",
+        "Suckout",
+        "UnknownImpairment"
+      ]
+    },
+    "deviceRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "deviceType": {
+              "const": "RPD"
+            },
+            "rpdId": {
+              "type": "string"
+            },
+            "portId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "deviceType",
+            "rpdId",
+            "portId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "deviceType": {
+              "const": "AMP"
+            },
+            "ampId": {
+              "type": "string"
+            },
+            "portId": {
+              "type": "string",
+              "description": "Amp output leg. Omit to reference the whole amp."
+            }
+          },
+          "required": [
+            "deviceType",
+            "ampId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "measurementRef": {
+      "type": "object",
+      "description": "RPD port -> rpdId+portId; AMP -> ampId+portId.",
+      "properties": {
+        "measurementId": {
+          "type": "string"
+        },
+        "deviceType": {
+          "type": "string",
+          "enum": [
+            "RPD",
+            "AMP"
+          ]
+        },
+        "rpdId": {
+          "type": "string"
+        },
+        "portId": {
+          "type": "string"
+        },
+        "ampId": {
+          "type": "string"
+        },
+        "measurementType": {
+          "type": "string",
+          "enum": [
+            "upstream_spectrum"
+          ]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "measurementId",
+        "deviceType",
+        "measurementType",
+        "timestamp"
+      ]
+    },
+    "classification": {
+      "type": "object",
+      "properties": {
+        "deviceType": {
+          "type": "string",
+          "enum": [
+            "RPD",
+            "AMP"
+          ]
+        },
+        "rpdId": {
+          "type": "string"
+        },
+        "portId": {
+          "type": "string"
+        },
+        "ampId": {
+          "type": "string"
+        },
+        "measurementId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "impaired",
+            "clean"
+          ]
+        },
+        "class": {
+          "$ref": "#/$defs/impairmentLabel"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "supports": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "finding"
+            ]
+          }
+        }
+      },
+      "required": [
+        "deviceType",
+        "measurementId",
+        "status",
+        "class",
+        "confidence"
+      ]
+    },
+    "errorResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "errorCode": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "errorCode"
+      ]
+    },
+    "rawSpectrum": {
+      "type": "object",
+      "description": "Raw upstream spectrum. Each trace array has length == numBins. Bin i center = startFrequencyHz + (i + 0.5) * (stopFrequencyHz - startFrequencyHz) / numBins.",
+      "properties": {
+        "startFrequencyHz": {
+          "type": "integer",
+          "description": "Low edge of the captured band."
+        },
+        "stopFrequencyHz": {
+          "type": "integer",
+          "description": "High edge of the captured band."
+        },
+        "numBins": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "traces": {
+          "type": "object",
+          "properties": {
+            "maxHold": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "Per-bin max-hold power (length = numBins)."
+            },
+            "minHold": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "Per-bin min-hold power (length = numBins)."
+            },
+            "average": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "Per-bin average power (length = numBins)."
+            }
+          },
+          "required": [
+            "maxHold",
+            "minHold",
+            "average"
+          ]
+        }
+      },
+      "required": [
+        "startFrequencyHz",
+        "stopFrequencyHz",
+        "numBins",
+        "traces"
+      ]
+    }
+  }
+}

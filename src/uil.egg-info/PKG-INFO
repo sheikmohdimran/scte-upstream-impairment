@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: uil
+Version: 0.1.0
+Summary: Agentic upstream impairment localization for vCMTS cable networks (Intel POC)
+Requires-Python: >=3.10
+Requires-Dist: pydantic>=2.6
+Requires-Dist: numpy>=1.24
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: jsonschema>=4.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Provides-Extra: agent
+Requires-Dist: langgraph>=0.2; extra == "agent"
+Requires-Dist: langchain>=0.3; extra == "agent"
+Requires-Dist: langchain-openai>=0.2; extra == "agent"

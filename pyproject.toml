@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uil"
+version = "0.1.0"
+description = "Agentic upstream impairment localization for vCMTS cable networks (Intel POC)"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.6",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "jsonschema>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+agent = ["langgraph>=0.2", "langchain>=0.3", "langchain-openai>=0.2"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

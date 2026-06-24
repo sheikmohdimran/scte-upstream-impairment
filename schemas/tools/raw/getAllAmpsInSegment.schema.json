@@ -1,0 +1,93 @@
+{
+  "name": "getAllAmpsInSegment",
+  "description": "Raw output: full amplifier enumeration plus optional topology.",
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "segmentId": {
+            "type": "string"
+          },
+          "ampListRef": {
+            "type": "string",
+            "description": "Same handle, so the SLM can drop the inline list and keep only this + ampCount."
+          },
+          "ampCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ampIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Network-unique amp ID."
+            }
+          },
+          "topologyTimestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amps": {
+            "type": "array",
+            "description": "Optional enhanced topology.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ampId": {
+                  "type": "string"
+                },
+                "parentId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "children": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "distanceFromRpdMeters": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "ampId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "status",
+          "segmentId",
+          "ampIds"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "TOPOLOGY_UNAVAILABLE",
+                  "INVALID_RPD_PORT",
+                  "EMPTY_SEGMENT",
+                  "STALE_TOPOLOGY",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

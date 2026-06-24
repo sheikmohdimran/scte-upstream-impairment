@@ -1,0 +1,77 @@
+{
+  "name": "getRPDSpectrumMeasurements",
+  "description": "Capture upstream spectrum at one RPD port.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "rpdId": {
+        "type": "string",
+        "description": "Network-unique RPD ID."
+      },
+      "portId": {
+        "type": "string",
+        "description": "Port within the RPD."
+      },
+      "numBins": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 256,
+        "description": "Frequency bins."
+      },
+      "startFrequencyHz": {
+        "type": "integer",
+        "default": 5000000,
+        "description": "Low edge of capture band."
+      },
+      "stopFrequencyHz": {
+        "type": "integer",
+        "default": 85000000,
+        "description": "High edge of capture band."
+      }
+    },
+    "required": [
+      "rpdId",
+      "portId"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "measurementRef": {
+            "$ref": "../_defs.schema.json#/$defs/measurementRef"
+          }
+        },
+        "required": [
+          "status",
+          "measurementRef"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "MEASUREMENT_UNAVAILABLE",
+                  "DEVICE_UNREACHABLE",
+                  "INVALID_RPD_PORT",
+                  "STALE_DATA_ONLY",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

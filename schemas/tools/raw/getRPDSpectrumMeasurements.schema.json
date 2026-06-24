@@ -1,0 +1,68 @@
+{
+  "name": "getRPDSpectrumMeasurements",
+  "description": "Raw output: the upstream spectrum payload for one RPD port.",
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "measurementId": {
+            "type": "string",
+            "description": "Backend-assigned ID of the stored measurement; pass to analyzeSpectrumMeasurements, echoed into the classification."
+          },
+          "rpdId": {
+            "type": "string"
+          },
+          "portId": {
+            "type": "string"
+          },
+          "deviceType": {
+            "const": "RPD"
+          },
+          "measurementType": {
+            "const": "upstream_spectrum"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "spectrum": {
+            "$ref": "../_defs.schema.json#/$defs/rawSpectrum"
+          }
+        },
+        "required": [
+          "status",
+          "measurementId",
+          "rpdId",
+          "portId",
+          "measurementType",
+          "timestamp",
+          "spectrum"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "MEASUREMENT_UNAVAILABLE",
+                  "DEVICE_UNREACHABLE",
+                  "INVALID_RPD_PORT",
+                  "STALE_DATA_ONLY",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

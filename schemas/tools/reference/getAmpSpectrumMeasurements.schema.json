@@ -1,0 +1,111 @@
+{
+  "name": "getAmpSpectrumMeasurements",
+  "description": "Capture upstream spectrum at every output port of the listed amplifiers.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "ampIds": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "description": "Network-unique amp ID."
+        }
+      },
+      "ampListRef": {
+        "type": "string",
+        "description": "Handle from getAllAmpsInSegment; backend resolves it to the full amp list. Use instead of ampIds for long lists."
+      },
+      "numBins": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 256,
+        "description": "Frequency bins."
+      },
+      "startFrequencyHz": {
+        "type": "integer",
+        "default": 5000000,
+        "description": "Low edge of capture band."
+      },
+      "stopFrequencyHz": {
+        "type": "integer",
+        "default": 85000000,
+        "description": "High edge of capture band."
+      }
+    },
+    "oneOf": [
+      {
+        "required": [
+          "ampIds"
+        ]
+      },
+      {
+        "required": [
+          "ampListRef"
+        ]
+      }
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "success",
+              "partial_success"
+            ]
+          },
+          "measurementSetRef": {
+            "type": "string",
+            "description": "Handle the backend resolves to the per-port measurement set; pass to analyzeSpectrumMeasurements."
+          },
+          "measurementCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Per-port measurements captured."
+          },
+          "failedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Amp ports that could not be measured."
+          },
+          "failedDevicesRef": {
+            "type": "string",
+            "description": "Optional handle to the failure detail (held in the backend); present when failedCount > 0."
+          }
+        },
+        "required": [
+          "status",
+          "measurementSetRef",
+          "measurementCount",
+          "failedCount"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "AMP_MEASUREMENTS_UNAVAILABLE",
+                  "DEVICE_UNREACHABLE",
+                  "INVALID_AMP_ID",
+                  "INVALID_AMP_LIST_REF",
+                  "TOO_MANY_DEVICES_REQUESTED",
+                  "STALE_DATA_ONLY",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

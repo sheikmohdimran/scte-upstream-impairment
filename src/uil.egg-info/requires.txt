@@ -1,0 +1,12 @@
+pydantic>=2.6
+numpy>=1.24
+pyyaml>=6.0
+jsonschema>=4.0
+
+[agent]
+langgraph>=0.2
+langchain>=0.3
+langchain-openai>=0.2
+
+[dev]
+pytest>=7.0

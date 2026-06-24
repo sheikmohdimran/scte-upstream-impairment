@@ -1,0 +1,107 @@
+{
+  "name": "getAmpSpectrumMeasurements",
+  "description": "Raw output: per-port spectrum payloads plus per-device failures.",
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "success",
+              "partial_success"
+            ]
+          },
+          "measurements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "measurementId": {
+                  "type": "string",
+                  "description": "Backend-assigned ID of this stored per-leg measurement; pass to analyzeSpectrumMeasurements, echoed into the classification."
+                },
+                "ampId": {
+                  "type": "string"
+                },
+                "portId": {
+                  "type": "string",
+                  "description": "Amp output leg."
+                },
+                "deviceType": {
+                  "const": "AMP"
+                },
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "measurementType": {
+                  "const": "upstream_spectrum"
+                },
+                "spectrum": {
+                  "$ref": "../_defs.schema.json#/$defs/rawSpectrum"
+                }
+              },
+              "required": [
+                "measurementId",
+                "ampId",
+                "portId",
+                "timestamp",
+                "spectrum"
+              ]
+            }
+          },
+          "failedDevices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ampId": {
+                  "type": "string"
+                },
+                "portId": {
+                  "type": "string",
+                  "description": "Present for port-level failures."
+                },
+                "errorCode": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ampId",
+                "errorCode"
+              ]
+            }
+          }
+        },
+        "required": [
+          "status",
+          "measurements",
+          "failedDevices"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "AMP_MEASUREMENTS_UNAVAILABLE",
+                  "DEVICE_UNREACHABLE",
+                  "INVALID_AMP_ID",
+                  "INVALID_AMP_LIST_REF",
+                  "TOO_MANY_DEVICES_REQUESTED",
+                  "STALE_DATA_ONLY",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "name": "getAllAmpsInSegment",
+  "description": "List amplifiers downstream of an RPD port.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "rpdId": {
+        "type": "string"
+      },
+      "portId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "rpdId",
+      "portId"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "segmentId": {
+            "type": "string"
+          },
+          "ampListRef": {
+            "type": "string",
+            "description": "Handle the backend resolves to the full amp list; pass to getAmpSpectrumMeasurements."
+          },
+          "ampCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "topologyTimestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "status",
+          "segmentId",
+          "ampListRef",
+          "ampCount"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "TOPOLOGY_UNAVAILABLE",
+                  "INVALID_RPD_PORT",
+                  "EMPTY_SEGMENT",
+                  "STALE_TOPOLOGY",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

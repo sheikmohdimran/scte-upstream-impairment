@@ -1,0 +1,90 @@
+{
+  "name": "analyzeSpectrumMeasurements",
+  "description": "Classify one or more spectrum measurements (a single RPD measurement, or a batch of amp measurements) into impairment labels.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "measurementRefs": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "../_defs.schema.json#/$defs/measurementRef"
+        }
+      },
+      "measurementSetRef": {
+        "type": "string",
+        "description": "Handle from getAmpSpectrumMeasurements; backend resolves it to the per-port measurement set. Use instead of measurementRefs for large batches."
+      }
+    },
+    "oneOf": [
+      {
+        "required": [
+          "measurementRefs"
+        ]
+      },
+      {
+        "required": [
+          "measurementSetRef"
+        ]
+      }
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "classificationSetRef": {
+            "type": "string",
+            "description": "Handle the backend resolves to the full per-item classifications; pass to localizeUpstreamSpectrumImpairmentSource."
+          },
+          "classificationCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "impairedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Items classified as impaired."
+          },
+          "classesPresent": {
+            "type": "array",
+            "items": {
+              "$ref": "../_defs.schema.json#/$defs/impairmentLabel"
+            },
+            "description": "Distinct labels found \u2014 lets the orchestrator pick impairmentType."
+          }
+        },
+        "required": [
+          "status",
+          "classificationSetRef",
+          "classificationCount"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "CLASSIFICATION_FAILED",
+                  "INVALID_MEASUREMENT_REF",
+                  "MEASUREMENT_TOO_STALE",
+                  "UNSUPPORTED_MEASUREMENT_TYPE",
+                  "INSUFFICIENT_SIGNAL_QUALITY"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,203 @@
+{
+  "name": "localizeUpstreamSpectrumImpairmentSource",
+  "description": "Estimate the physical source of an upstream impairment.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "rpdId": {
+        "type": "string"
+      },
+      "portId": {
+        "type": "string"
+      },
+      "impairmentType": {
+        "$ref": "../_defs.schema.json#/$defs/impairmentLabel"
+      },
+      "classificationSetRefs": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string"
+        },
+        "description": "Handles from analyzeSpectrumMeasurements — e.g. the RPD set and the amp set. The backend resolves and merges them; the localizer separates RPD vs amp entries by deviceType."
+      }
+    },
+    "required": [
+      "rpdId",
+      "portId",
+      "impairmentType",
+      "classificationSetRefs"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "impairmentType": {
+            "$ref": "../_defs.schema.json#/$defs/impairmentLabel"
+          },
+          "localizationStatus": {
+            "type": "string",
+            "enum": [
+              "localized",
+              "low_confidence"
+            ]
+          },
+          "likelySourceLocation": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "locationType": {
+                "type": "string",
+                "enum": [
+                  "span",
+                  "device",
+                  "branch"
+                ]
+              },
+              "description": {
+                "type": "string"
+              },
+              "upstreamBoundaryDevice": {
+                "$ref": "../_defs.schema.json#/$defs/deviceRef"
+              },
+              "downstreamBoundaryDevice": {
+                "$ref": "../_defs.schema.json#/$defs/deviceRef"
+              }
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "candidateLocations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "locationType": {
+                  "type": "string",
+                  "enum": [
+                    "span",
+                    "device",
+                    "branch"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "locationType",
+                "description",
+                "score"
+              ]
+            }
+          },
+          "supportingDevices": {
+            "type": "array",
+            "items": {
+              "$ref": "../_defs.schema.json#/$defs/deviceRef"
+            }
+          },
+          "cleanBoundaryDevices": {
+            "type": "array",
+            "items": {
+              "$ref": "../_defs.schema.json#/$defs/deviceRef"
+            }
+          },
+          "uncertainDevices": {
+            "type": "array",
+            "items": {
+              "$ref": "../_defs.schema.json#/$defs/deviceRef"
+            }
+          },
+          "recommendedNextAction": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "targetDevices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "action"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "impairmentType",
+          "localizationStatus",
+          "confidence",
+          "candidateLocations"
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "$ref": "../_defs.schema.json#/$defs/errorResponse"
+          },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "INSUFFICIENT_LOCALIZATION_EVIDENCE",
+                  "TOPOLOGY_UNAVAILABLE",
+                  "INVALID_CLASSIFICATION_SET_REF",
+                  "NO_IMPAIRMENT_CONFIRMED",
+                  "CONFLICTING_CLASSIFICATIONS",
+                  "UNSUPPORTED_IMPAIRMENT_TYPE"
+                ]
+              },
+              "invalidClassificationSetRefs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                },
+                "description": "The subset of the requested classificationSetRefs that could not be resolved, so the orchestrator can tell which set failed (e.g. the RPD set vs the amp set). Present when errorCode is INVALID_CLASSIFICATION_SET_REF."
+              }
+            },
+            "if": {
+              "properties": {
+                "errorCode": {
+                  "const": "INVALID_CLASSIFICATION_SET_REF"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "invalidClassificationSetRefs"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

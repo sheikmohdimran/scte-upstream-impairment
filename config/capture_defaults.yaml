@@ -1,0 +1,6 @@
+# Default upstream spectrum capture parameters (DOCSIS upstream band).
+# Mirrors the tool inputSchema defaults.
+capture:
+  start_frequency_hz: 5000000      # 5 MHz
+  stop_frequency_hz: 85000000      # 85 MHz
+  num_bins: 256
