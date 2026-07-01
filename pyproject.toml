@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 agent = ["langgraph>=0.2", "langchain>=0.3", "langchain-openai>=0.2"]
+cnn = ["torch>=2.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

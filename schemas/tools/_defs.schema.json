@@ -17,6 +17,55 @@
         "UnknownImpairment"
       ]
     },
+    "generatorImpairmentType": {
+      "type": "string",
+      "description": "Generator-level impairment type (snake_case). Used in spectrumSample.impairments. Callers of T7/T8 supply ImpairmentLabel CamelCase values; the server maps them to these internally.",
+      "enum": [
+        "clean",
+        "cpd",
+        "ingress_narrowband",
+        "ingress_burst",
+        "impulse_noise",
+        "micro_reflection",
+        "amplitude_tilt"
+      ]
+    },
+    "spectrumSample": {
+      "type": "object",
+      "description": "One upstream spectrum sample: 8 time-snapshots x 200 frequency bins, linear power units (5-85 MHz at 400 kHz/bin). Native CNN training format.",
+      "properties": {
+        "deviceId":         { "type": "string" },
+        "deviceType":       { "type": "string", "enum": ["RPD", "AMP"] },
+        "impairments":      {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/generatorImpairmentType" }
+        },
+        "severity":         { "type": "number", "minimum": 0, "maximum": 1 },
+        "snapshots":        {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "array",
+            "minItems": 200,
+            "maxItems": 200,
+            "items": { "type": "number" }
+          }
+        },
+        "startFrequencyHz": { "type": "integer" },
+        "stopFrequencyHz":  { "type": "integer" },
+        "numBins":          { "type": "integer", "const": 200 },
+        "numSnapshots":     { "type": "integer", "const": 8 },
+        "powerUnit":        { "type": "string", "const": "linear" },
+        "timestamp":        { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "deviceId", "deviceType", "impairments", "severity", "snapshots",
+        "startFrequencyHz", "stopFrequencyHz", "numBins", "numSnapshots",
+        "powerUnit", "timestamp"
+      ]
+    },
     "deviceRef": {
       "oneOf": [
         {

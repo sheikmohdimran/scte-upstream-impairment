@@ -1,0 +1,44 @@
+{
+  "name": "getSignalMetrics",
+  "description": "Raw output: full spectrum sample (8x200 linear power) plus scalar RF metrics.",
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status":             { "const": "success" },
+          "modemId":            { "type": "string" },
+          "windowSec":          { "type": "integer", "minimum": 1 },
+          "upstreamTxPower":    { "type": "number" },
+          "downstreamSnr":      { "type": "number" },
+          "uncorrectablesRate": { "type": "number", "minimum": 0, "maximum": 1 },
+          "observationSummary": { "type": "string" },
+          "spectrum":           { "$ref": "../_defs.schema.json#/$defs/spectrumSample" }
+        },
+        "required": [
+          "status", "modemId", "windowSec",
+          "upstreamTxPower", "downstreamSnr", "uncorrectablesRate",
+          "observationSummary", "spectrum"
+        ]
+      },
+      {
+        "allOf": [
+          { "$ref": "../_defs.schema.json#/$defs/errorResponse" },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "DEVICE_UNREACHABLE",
+                  "MODEM_OFFLINE",
+                  "INVALID_DEVICE_ID",
+                  "WINDOW_TOO_LARGE",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

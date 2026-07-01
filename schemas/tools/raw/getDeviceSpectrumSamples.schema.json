@@ -1,0 +1,38 @@
+{
+  "name": "getDeviceSpectrumSamples",
+  "description": "Raw output: inline spectrum samples per device (8x200 linear power, 5-85 MHz).",
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status":      { "const": "success" },
+          "runSeverity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "deviceCount": { "type": "integer", "minimum": 0 },
+          "samples": {
+            "type": "array",
+            "items": { "$ref": "../_defs.schema.json#/$defs/spectrumSample" }
+          }
+        },
+        "required": ["status", "runSeverity", "deviceCount", "samples"]
+      },
+      {
+        "allOf": [
+          { "$ref": "../_defs.schema.json#/$defs/errorResponse" },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "TOO_MANY_DEVICES",
+                  "INVALID_DEVICE_ID",
+                  "INVALID_IMPAIRMENT",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

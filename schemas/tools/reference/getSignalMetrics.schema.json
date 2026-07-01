@@ -1,0 +1,76 @@
+{
+  "name": "getSignalMetrics",
+  "description": "Derive scalar upstream RF metrics for a modem over an observation window. Returns scalar summaries and an opaque rawArtifactRef; raw spectrum snapshots are never on this surface.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "modemId": {
+        "type": "string",
+        "description": "Modem identifier. Must start with 'rpd-' or 'amp-'."
+      },
+      "windowSec": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400,
+        "default": 60,
+        "description": "Observation window in seconds."
+      }
+    },
+    "required": ["modemId"],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status":             { "const": "success" },
+          "rawArtifactRef":     {
+            "type": "string",
+            "description": "Opaque handle. Resolve via the raw surface to get the inline spectrum sample."
+          },
+          "observationSummary": {
+            "type": "string",
+            "description": "Human-readable summary of the observation window."
+          },
+          "upstreamTxPower":    {
+            "type": "number",
+            "description": "Upstream transmit power in dBmV."
+          },
+          "uncorrectablesRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Uncorrectable codeword rate over the observation window."
+          },
+          "downstreamSnr": {
+            "type": "number",
+            "description": "Downstream SNR in dB."
+          }
+        },
+        "required": [
+          "status", "rawArtifactRef", "observationSummary",
+          "upstreamTxPower", "uncorrectablesRate", "downstreamSnr"
+        ]
+      },
+      {
+        "allOf": [
+          { "$ref": "../_defs.schema.json#/$defs/errorResponse" },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "DEVICE_UNREACHABLE",
+                  "MODEM_OFFLINE",
+                  "INVALID_DEVICE_ID",
+                  "WINDOW_TOO_LARGE",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

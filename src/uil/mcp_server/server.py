@@ -10,13 +10,19 @@ orchestrator's recovery logic — the paper's real value-prop — can be exercis
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+import numpy as np
+
+from uil.classifier.cnn_classifier import CnnClassifier
 from uil.classifier.rule_classifier import RuleClassifier
 from uil.domain.labels import ImpairmentLabel
+from uil.domain.spectrum_sample import DeviceSpecification, ImpairmentType
 from uil.localizer.graph_localizer import GraphLocalizer, Topology
 from uil.mcp_server.handle_store import HandleStore
+from uil.sim.spectrum_sample_generator import SpectrumSampleGenerator, _LABEL_TO_IMPAIRMENT_TYPE
 from uil.sim.spectrum_simulator import SpectrumSimulator
 
 
@@ -41,16 +47,31 @@ class Scenario:
     rpd_label: ImpairmentLabel
     amps: list[dict]  # each: {ampId, parentId, label}
     faults: FaultInjection = field(default_factory=FaultInjection)
+    severity: float = 1.0      # run-level severity; fixed for this run's lifetime
+    max_devices: int = 50      # parameterised cap for getDeviceSpectrumSamples
 
 
 class MockMcpServer:
-    def __init__(self, scenario: Scenario, seed: int = 42) -> None:
-        self.scn = scenario
-        self.store = HandleStore()
-        self.sim = SpectrumSimulator(seed=seed)
-        self.clf = RuleClassifier()
+    def __init__(self, scenario: Scenario, seed: int = 42, classifier=None,
+                 use_cnn_path: bool = False) -> None:
+        self.scn          = scenario
+        self.store        = HandleStore()
+        self.sim          = SpectrumSimulator(seed=seed)   # always — legacy T1/T4 path
+        self.sample_gen   = SpectrumSampleGenerator()      # always — T7/T8 + CNN path
+        self.use_cnn_path = use_cnn_path
+        if use_cnn_path:
+            if classifier is not None and not isinstance(classifier, CnnClassifier):
+                raise ValueError(
+                    "use_cnn_path=True requires CnnClassifier; "
+                    f"got {type(classifier).__name__}"
+                )
+            self.clf = CnnClassifier()
+        else:
+            # Default to RuleClassifier so the synthetic-data tests remain stable.
+            # Pass classifier=CnnClassifier() to use the v1 CNN on real HFC data.
+            self.clf = classifier if classifier is not None else RuleClassifier()
         self.localizer = GraphLocalizer()
-        self._labels = {a["ampId"]: ImpairmentLabel(a.get("label", "Clean")) for a in scenario.amps}
+        self._labels   = {a["ampId"]: ImpairmentLabel(a.get("label", "Clean")) for a in scenario.amps}
         self._rpd_measurement_attempts = 0
 
     # ---- Tool 1 ---------------------------------------------------------
@@ -63,12 +84,19 @@ class MockMcpServer:
             return {"status": "error", "errorCode": "STALE_DATA_ONLY"}
         if self.scn.faults.rpd_measurement_unavailable_once and self._rpd_measurement_attempts == 1:
             return {"status": "error", "errorCode": "MEASUREMENT_UNAVAILABLE"}
-        spectrum = self.sim.generate(self.scn.rpd_label)
-        ts = _now()
-        meas_id = self.store.put("meas", {
-            "deviceType": "RPD", "rpdId": rpdId, "portId": portId,
-            "timestamp": ts, "spectrum": spectrum,
-        })
+        if self.use_cnn_path:
+            imp_type = _LABEL_TO_IMPAIRMENT_TYPE[self.scn.rpd_label]
+            spec     = DeviceSpecification(deviceId=f"rpd-{rpdId}", deviceType="RPD",
+                                           impairments=[imp_type])
+            sample   = self.sample_gen.generate(spec, run_severity=self.scn.severity)
+            payload  = {"deviceType": "RPD", "rpdId": rpdId, "portId": portId,
+                        "timestamp": sample.timestamp, "snapshots": sample.snapshots}
+        else:
+            spectrum = self.sim.generate(self.scn.rpd_label)
+            payload  = {"deviceType": "RPD", "rpdId": rpdId, "portId": portId,
+                        "timestamp": _now(), "spectrum": spectrum}
+        ts      = payload["timestamp"]
+        meas_id = self.store.put("meas", payload)
         return {
             "status": "success",
             "measurementRef": {
@@ -101,12 +129,23 @@ class MockMcpServer:
 
         classifications = []
         for item in raw_items:
-            c = self.clf.classify_spectrum(
-                item["spectrum"],
-                device_type=item["deviceType"],
-                measurement_id=item.get("_mid", item.get("measurementId", "?")),
-                rpd_id=item.get("rpdId"), port_id=item.get("portId"), amp_id=item.get("ampId"),
-            )
+            mid = item.get("_mid", item.get("measurementId", "?"))
+            if "snapshots" in item:
+                # CNN path: native 8x200 linear format — no conversion needed
+                c = self.clf.classify_snapshots(
+                    np.array(item["snapshots"], dtype=np.float32),
+                    device_type=item["deviceType"],
+                    measurement_id=mid,
+                    rpd_id=item.get("rpdId"), port_id=item.get("portId"), amp_id=item.get("ampId"),
+                )
+            else:
+                # Legacy path: RawSpectrum (256-bin dBmV)
+                c = self.clf.classify_spectrum(
+                    item["spectrum"],
+                    device_type=item["deviceType"],
+                    measurement_id=mid,
+                    rpd_id=item.get("rpdId"), port_id=item.get("portId"), amp_id=item.get("ampId"),
+                )
             classifications.append(c)
 
         set_ref = self.store.put("classset", classifications)
@@ -162,12 +201,18 @@ class MockMcpServer:
             if amp_id not in self._labels:
                 failed.append({"ampId": amp_id, "errorCode": "INVALID_AMP_ID"})
                 continue
-            spectrum = self.sim.generate(self._labels[amp_id])
-            ts = _now()
-            mid = self.store.put("meas", {
-                "deviceType": "AMP", "ampId": amp_id, "portId": "0",
-                "timestamp": ts, "spectrum": spectrum,
-            })
+            if self.use_cnn_path:
+                imp_type = _LABEL_TO_IMPAIRMENT_TYPE[self._labels[amp_id]]
+                spec     = DeviceSpecification(deviceId=f"amp-{amp_id}", deviceType="AMP",
+                                               impairments=[imp_type])
+                sample   = self.sample_gen.generate(spec, run_severity=self.scn.severity)
+                payload  = {"deviceType": "AMP", "ampId": amp_id, "portId": "0",
+                            "timestamp": sample.timestamp, "snapshots": sample.snapshots}
+            else:
+                spectrum = self.sim.generate(self._labels[amp_id])
+                payload  = {"deviceType": "AMP", "ampId": amp_id, "portId": "0",
+                            "timestamp": _now(), "spectrum": spectrum}
+            mid = self.store.put("meas", payload)
             # echo the measurementId into the stored payload so analyze can label it
             self.store.get(mid)["_mid"] = mid
             measurements.append(mid)
@@ -210,3 +255,87 @@ class MockMcpServer:
         topo = Topology.from_amp_list(rpdId, portId, amp_records)
         result = self.localizer.localize(rpdId, portId, ImpairmentLabel(impairmentType), pooled, topo)
         return result.model_dump(mode="json", exclude_none=True)
+
+    # ---- Tool 7 ---------------------------------------------------------
+    def getDeviceSpectrumSamples(self, devices: list[dict]) -> dict:
+        """Generate spectrum samples for RPD/amp devices (T7 — new tool).
+
+        Input device IDs must start with 'rpd-' or 'amp-'.
+        Impairment labels use existing ImpairmentLabel CamelCase values.
+        Run-level severity comes from Scenario.severity.
+        """
+        if len(devices) > self.scn.max_devices:
+            return {"status": "error", "errorCode": "TOO_MANY_DEVICES",
+                    "message": f"Requested {len(devices)}, limit is {self.scn.max_devices}"}
+        specs = []
+        for d in devices:
+            did = d.get("deviceId", "")
+            if did.startswith("rpd-"):
+                dtype = "RPD"
+            elif did.startswith("amp-"):
+                dtype = "AMP"
+            else:
+                return {"status": "error", "errorCode": "INVALID_DEVICE_ID",
+                        "message": f"deviceId '{did}' must start with 'rpd-' or 'amp-'"}
+            try:
+                impairments = [
+                    _LABEL_TO_IMPAIRMENT_TYPE[ImpairmentLabel(lbl)]
+                    for lbl in d.get("impairments", ["Clean"])
+                ]
+            except ValueError as exc:
+                return {"status": "error", "errorCode": "INVALID_IMPAIRMENT",
+                        "message": str(exc)}
+            specs.append(DeviceSpecification(
+                deviceId=did, deviceType=dtype,
+                impairments=impairments,
+                severity=d.get("severity"),
+            ))
+        result = self.sample_gen.generate_group(
+            specs, run_severity=self.scn.severity, max_devices=self.scn.max_devices
+        )
+        ref = self.store.put("sampleset", result)
+        return {
+            "status":      "success",
+            "sampleSetRef": ref,
+            "deviceCount": result.deviceCount,
+            "runSeverity": result.runSeverity,
+        }
+
+    # ---- Tool 8 ---------------------------------------------------------
+    def getSignalMetrics(self, modemId: str, windowSec: int = 60) -> dict:
+        """Derive scalar upstream RF metrics for a modem (T8 — new tool).
+
+        modemId must start with 'rpd-' or 'amp-'. Generates a clean
+        spectrum baseline deterministically; scalars are also deterministic.
+        """
+        if modemId.startswith("rpd-"):
+            dtype = "RPD"
+        elif modemId.startswith("amp-"):
+            dtype = "AMP"
+        else:
+            return {"status": "error", "errorCode": "INVALID_DEVICE_ID",
+                    "message": f"modemId '{modemId}' must start with 'rpd-' or 'amp-'"}
+        spec   = DeviceSpecification(
+            deviceId=modemId, deviceType=dtype, impairments=[ImpairmentType.clean]
+        )
+        sample = self.sample_gen.generate(spec, run_severity=self.scn.severity)
+        ref    = self.store.put("sigmet", sample)
+        # Deterministic scalar telemetry — same inputs always give same values
+        key = f"{modemId}:{windowSec}:{self.scn.severity:.4f}"
+        rng = np.random.default_rng(
+            int.from_bytes(hashlib.md5(key.encode()).digest()[:4], "big")
+        )
+        tx   = float(38.0 + rng.uniform(0, 14))
+        snr  = float(35.0 + rng.uniform(0, 10))
+        uncr = float(min(rng.exponential(0.001), 1.0))
+        return {
+            "status":             "success",
+            "rawArtifactRef":     ref,
+            "observationSummary": (
+                f"Modem {modemId}: TX={tx:.1f} dBmV, DS-SNR={snr:.1f} dB, "
+                f"uncorr={uncr:.4f} ({windowSec}s, severity={self.scn.severity:.2f})"
+            ),
+            "upstreamTxPower":    tx,
+            "downstreamSnr":      snr,
+            "uncorrectablesRate": uncr,
+        }

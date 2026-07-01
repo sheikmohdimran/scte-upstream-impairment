@@ -1,0 +1,73 @@
+{
+  "name": "getDeviceSpectrumSamples",
+  "description": "Generate synthetic upstream spectrum samples (8x200 linear power) for a list of RPD or smart amp devices. Returns an opaque sampleSetRef; raw snapshots are never on this surface.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "devices": {
+        "type": "array",
+        "minItems": 1,
+        "description": "List of devices to generate samples for. Max count is enforced by the run's Scenario.max_devices.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "deviceId": {
+              "type": "string",
+              "description": "Device identifier. Must start with 'rpd-' (RPD) or 'amp-' (smart amp)."
+            },
+            "impairments": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "../_defs.schema.json#/$defs/impairmentLabel" },
+              "description": "Impairment types to inject. Defaults to [Clean]."
+            },
+            "severity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Per-device severity override [0,1]. Omit to use the run-level Scenario.severity."
+            }
+          },
+          "required": ["deviceId"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["devices"],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status":       { "const": "success" },
+          "sampleSetRef": {
+            "type": "string",
+            "description": "Opaque handle. Resolve via the raw surface to get the inline spectrum arrays."
+          },
+          "deviceCount":  { "type": "integer", "minimum": 0 },
+          "runSeverity":  { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["status", "sampleSetRef", "deviceCount", "runSeverity"]
+      },
+      {
+        "allOf": [
+          { "$ref": "../_defs.schema.json#/$defs/errorResponse" },
+          {
+            "properties": {
+              "errorCode": {
+                "enum": [
+                  "TOO_MANY_DEVICES",
+                  "INVALID_DEVICE_ID",
+                  "INVALID_IMPAIRMENT",
+                  "PERMISSION_DENIED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

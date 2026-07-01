@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator, RefResolver
 from uil.domain.classification import Classification
 from uil.domain.labels import ImpairmentLabel
 from uil.domain.spectrum import RawSpectrum, SpectrumTraces
+from uil.domain.spectrum_sample import DeviceSpecification, ImpairmentType, SpectrumSample
 
 SCHEMA_DIR = Path(__file__).resolve().parents[1] / "schemas" / "tools"
 
@@ -62,6 +63,21 @@ def test_classification_validates_against_defs() -> None:
     )
     # by_alias so "class" key is emitted; exclude_none so optional ids stay absent.
     Draft202012Validator(schema).validate(c.model_dump(by_alias=True, mode="json", exclude_none=True))
+
+
+def test_spectrum_sample_validates_against_defs() -> None:
+    """SpectrumSample model_dump() must validate against _defs.schema.json#spectrumSample."""
+    defs   = _load(SCHEMA_DIR / "_defs.schema.json")
+    schema = {"$ref": "#/$defs/spectrumSample", "$defs": defs["$defs"]}
+    sample = SpectrumSample(
+        deviceId="rpd-001", deviceType="RPD",
+        impairments=["cpd"], severity=0.8,
+        snapshots=[[float(i % 100) for _ in range(200)] for i in range(8)],
+        startFrequencyHz=5_000_000, stopFrequencyHz=85_000_000,
+        numBins=200, numSnapshots=8, powerUnit="linear",
+        timestamp="2026-07-01T00:00:00+00:00",
+    )
+    Draft202012Validator(schema).validate(sample.model_dump())
 
 
 def test_rpd_tool_success_output_conforms(server) -> None:
