@@ -3,6 +3,8 @@
 from uil.agent.orchestrator import Orchestrator, OrchestratorResult
 from uil.agent.trace import ToolCall, ToolCallTrace
 from uil.agent.handoff import build_handoff_summary
+from uil.agent.trigger import AlarmTrigger, TriggerDecision, UPSTREAM_FEC_ALARM_TYPES
+from uil.agent.trace_store import TraceStore
 
 __all__ = [
     "Orchestrator",
@@ -10,6 +12,10 @@ __all__ = [
     "ToolCall",
     "ToolCallTrace",
     "build_handoff_summary",
+    "AlarmTrigger",
+    "TriggerDecision",
+    "UPSTREAM_FEC_ALARM_TYPES",
+    "TraceStore",
 ]
 
 # Phase 3 LangGraph agent is optional (needs langgraph/langchain). Import lazily so the

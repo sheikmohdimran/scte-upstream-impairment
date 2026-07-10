@@ -49,6 +49,7 @@ class Scenario:
     faults: FaultInjection = field(default_factory=FaultInjection)
     severity: float = 1.0      # run-level severity; fixed for this run's lifetime
     max_devices: int = 50      # parameterised cap for getDeviceSpectrumSamples
+    topology_doc: dict | None = None  # optional CableLabs RF plant data-package (T3 real shape)
 
 
 class MockMcpServer:
@@ -163,6 +164,22 @@ class MockMcpServer:
     def getAllAmpsInSegment(self, rpdId: str, portId: str) -> dict:
         if self.scn.faults.topology_unavailable:
             return {"status": "error", "errorCode": "TOPOLOGY_UNAVAILABLE"}
+        if self.scn.topology_doc is not None:
+            # Real CableLabs plant data-package: store the doc; localize parses it.
+            topo = Topology.from_data_package(rpdId, portId, self.scn.topology_doc)
+            amp_count = len(topo.amp_ids)
+            if amp_count == 0:
+                return {"status": "error", "errorCode": "EMPTY_SEGMENT"}
+            amp_list_ref = self.store.put(
+                "amplist", {"rpdId": rpdId, "portId": portId, "doc": self.scn.topology_doc}
+            )
+            return {
+                "status": "success",
+                "segmentId": f"seg-{rpdId}-{portId}",
+                "ampListRef": amp_list_ref,
+                "ampCount": amp_count,
+                "topologyTimestamp": _now(),
+            }
         if not self.scn.amps:
             return {"status": "error", "errorCode": "EMPTY_SEGMENT"}
         amp_records = [{
@@ -245,14 +262,22 @@ class MockMcpServer:
             return {"status": "error", "errorCode": "NO_IMPAIRMENT_CONFIRMED"}
 
         amp_records = None
+        topology_doc = None
         for handle in self.store._data:  # find the topology we built in tool 3
             if handle.startswith("amplist"):
-                amp_records = self.store.get(handle)["amps"]
+                stored = self.store.get(handle)
+                if "doc" in stored:
+                    topology_doc = stored["doc"]
+                else:
+                    amp_records = stored["amps"]
                 break
-        if amp_records is None:
+        if topology_doc is not None:
+            topo = Topology.from_data_package(rpdId, portId, topology_doc)
+        elif amp_records is not None:
+            topo = Topology.from_amp_list(rpdId, portId, amp_records)
+        else:
             return {"status": "error", "errorCode": "TOPOLOGY_UNAVAILABLE"}
 
-        topo = Topology.from_amp_list(rpdId, portId, amp_records)
         result = self.localizer.localize(rpdId, portId, ImpairmentLabel(impairmentType), pooled, topo)
         return result.model_dump(mode="json", exclude_none=True)
 

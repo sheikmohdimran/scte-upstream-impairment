@@ -30,7 +30,26 @@ class AmpDeviceRef(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-DeviceRef = Union[RpdDeviceRef, AmpDeviceRef]
+class PlantDeviceRef(BaseModel):
+    """Reference to a passive RF plant device (splitter/tap/coupler/power-inserter).
+
+    Localization can land on a passive common point, not just an amp. ``deviceType``
+    carries the source plant component type (e.g. ``RfSplitter``); ``deviceId`` is the
+    plant-record component id.
+    """
+
+    deviceType: str = Field(
+        description="Plant component type, e.g. RfSplitter/RfTap/RfCoupler/RfPowerInserter."
+    )
+    deviceId: str
+    name: Optional[str] = Field(
+        default=None, description="Human-readable plant label, e.g. 'SP1' or 'TAP3'."
+    )
+
+    model_config = {"extra": "forbid"}
+
+
+DeviceRef = Union[RpdDeviceRef, AmpDeviceRef, PlantDeviceRef]
 
 
 class MeasurementRef(BaseModel):
