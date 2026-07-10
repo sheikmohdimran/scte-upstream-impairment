@@ -53,10 +53,18 @@ LangGraph + SLM; needs `SLM_BASE_URL`/`SLM_MODEL`).
 
 ## Open dependencies on CableLabs (track against asks)
 - CPD spectral signature spec (Irene) → tightens Step 3.
-- `getAllAmpsInSegment` topology (`amps[]` parent/children/distance) (Randy) → confirms Step 6 inputs.
-- Trigger contract (SNMP trap / Kafka) (Randy) → Phase 4.
+- ~~`getAllAmpsInSegment` topology (Randy) → confirms Step 6 inputs.~~ **RESOLVED**: real
+  plant data-package samples provided; parser in `src/uil/localizer/plant_topology.py`
+  (components + edges, passive-aware common point). Binding details C1–C3 in
+  `docs/operations/open-decisions.md` still open (non-blocking).
+- Trigger contract (Randy): **semantics RESOLVED** via `alarms.json` → gate in
+  `src/uil/agent/trigger.py`; wired into `Orchestrator.run_from_alarm` /
+  `LangGraphAgent.run_from_alarm`; transport (SNMP trap / Kafka) still open → Phase 4.
+- **Audit trace persistence (regulatory)**: `src/uil/agent/trace_store.py` — append-only,
+  tamper-evident (SHA-256 hash chain), daily-rotated JSONL; on by default; handles-only.
 - `impairmentType` selection rule for localize step 6 (Randy/Irene).
-- CNN reuse details / sample captures (Irene + Bhaskar) → replaces Step 4.
+- CNN reuse details / sample captures (Irene + Bhaskar) → handled separately; interface
+  contract: 5–184 MHz / 180 pts @1 MHz / dBuV (raw_byte*0.5) / maxhold detector.
 
 ## Repo publication and verification status
 - Git worktree branch for implementation: `impl-plan-2026-06-24`.

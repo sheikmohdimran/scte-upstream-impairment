@@ -243,12 +243,42 @@ class LangGraphAgent:
         self.toolset = McpToolset(server, self.trace)
         self.llm = llm if llm is not None else build_chat_model()
         self.graph = _create_agent(self.llm, build_tools(self.toolset), **{_prompt_kw: SYSTEM_PROMPT})
+        from uil.agent.trace_store import TraceStore
+        self.trace_store = TraceStore()
+        self._trigger: Optional[dict[str, Any]] = None
 
     def default_goal(self) -> str:
         return (
             f"An upstream impairment alarm fired on RPD {self.server.scn.rpdId} "
             f"port {self.server.scn.portId}. Localize the physical source and report it."
         )
+
+    def run_from_alarm(self, alarm: dict, goal: Optional[str] = None) -> AgentRunResult:
+        """Gate the alarm first (deterministic oracle), then run the SLM only on a positive.
+
+        Mirrors :meth:`Orchestrator.run_from_alarm` so the trigger decision is reproducible
+        and the SLM is not invoked on obvious negatives.
+        """
+        from uil.agent.trigger import AlarmTrigger
+
+        decision = AlarmTrigger().evaluate(alarm)
+        self._trigger = {
+            "verdict": decision.verdict, "reason": decision.reason,
+            "alarmId": alarm.get("alarmId"), "alarmType": alarm.get("alarmType"),
+        }
+        if not decision.should_trigger:
+            self.trace.final_status = "not_triggered"
+            self.trace_store.record(self.trace, extra={"trigger": self._trigger})
+            return AgentRunResult(
+                final_message=f"No workflow triggered: {decision.reason}.",
+                localization=None, trace=self.trace, messages=[],
+            )
+        args = decision.tool_call["arguments"]
+        alarm_goal = goal or (
+            f"An upstream impairment alarm ({alarm.get('alarmType')}) fired on RPD "
+            f"{args['rpdId']} port {args['portId']}. Localize the physical source and report it."
+        )
+        return self.run(goal=alarm_goal)
 
     def run(self, goal: Optional[str] = None) -> AgentRunResult:
         out = self.graph.invoke(
@@ -268,11 +298,12 @@ class LangGraphAgent:
                 reason=f"Agent ended without confident localization (status={status}).",
                 localization=loc,
             )
+        extra = {"trigger": self._trigger} if self._trigger is not None else None
+        self.trace_store.record(self.trace, extra=extra)
         return AgentRunResult(
             final_message=final if isinstance(final, str) else str(final),
             localization=loc, trace=self.trace, handoff_markdown=handoff, messages=messages,
         )
-
 
 def _main() -> None:
     """Run the CPD demo scenario against a configured OpenAI-compatible SLM endpoint."""

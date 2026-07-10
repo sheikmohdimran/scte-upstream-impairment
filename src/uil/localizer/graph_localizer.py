@@ -26,7 +26,8 @@ from uil.domain.localization import (
     LocalizationResult,
     RecommendedNextAction,
 )
-from uil.domain.refs import AmpDeviceRef, RpdDeviceRef
+from uil.domain.refs import AmpDeviceRef, PlantDeviceRef, RpdDeviceRef
+from uil.localizer.plant_topology import parse_data_package
 
 
 @dataclass
@@ -35,6 +36,8 @@ class AmpNode:
     parentId: Optional[str] = None
     children: list[str] = field(default_factory=list)
     distanceFromRpdMeters: Optional[float] = None
+    deviceType: str = "AMP"  # "AMP" (measured), "RPD" (root), or passive plant type
+    name: Optional[str] = None
 
 
 @dataclass
@@ -54,6 +57,43 @@ class Topology:
             if n.parentId and n.parentId in nodes and n.ampId not in nodes[n.parentId].children:
                 nodes[n.parentId].children.append(n.ampId)
         return cls(rpdId=rpd_id, portId=port_id, amps=nodes)
+
+    @classmethod
+    def from_data_package(cls, rpd_id: str, port_id: str, doc: dict) -> "Topology":
+        """Build a topology from the CableLabs RF plant data-package.
+
+        Passive devices (splitter/tap/coupler/power-inserter) are kept as nodes so the
+        common point can land on them; connectors (ports/cables) and subscriber homes are
+        collapsed away. See :mod:`uil.localizer.plant_topology` for the parsing assumptions.
+        """
+        parsed = parse_data_package(doc)
+        nodes = {
+            nid: AmpNode(
+                ampId=nid,
+                parentId=pn.parentId,
+                children=list(pn.children),
+                distanceFromRpdMeters=pn.distanceFromRpdMeters,
+                deviceType=pn.deviceType,
+                name=pn.name,
+            )
+            for nid, pn in parsed["nodes"].items()
+        }
+        return cls(rpdId=rpd_id, portId=port_id, amps=nodes)
+
+    @property
+    def amp_ids(self) -> list[str]:
+        """Ids of measured (RfAmp) devices only — passives/root are excluded."""
+        return [nid for nid, n in self.amps.items() if n.deviceType == "AMP"]
+
+    def ref_for(self, node_id: str):
+        """Build the right device ref for a node (amp vs passive vs RPD root)."""
+        node = self.amps.get(node_id)
+        dtype = node.deviceType if node else "AMP"
+        if dtype == "RPD":
+            return RpdDeviceRef(rpdId=self.rpdId, portId=self.portId)
+        if dtype == "AMP":
+            return AmpDeviceRef(ampId=node_id)
+        return PlantDeviceRef(deviceType=dtype, deviceId=node_id, name=node.name if node else None)
 
     def path_to_rpd(self, amp_id: str) -> list[str]:
         """Amp ids from ``amp_id`` up to (and excluding) the RPD root."""
@@ -78,8 +118,8 @@ class GraphLocalizer:
         impaired = {aid for aid, c in amp_class.items() if c.status == "impaired"}
         clean = {aid for aid, c in amp_class.items() if c.status == "clean"}
         measured = set(amp_class)
-        # amps in topology that we never got a measurement for
-        uncertain = [a for a in topology.amps if a not in measured]
+        # measured-capable devices (amps) in topology that we never got a measurement for
+        uncertain = [a for a in topology.amp_ids if a not in measured]
 
         # Conflicting / multi-anomaly: impaired devices carry more than one distinct
         # non-Clean label (across RPD + amps). Common-point analysis assumes a single
@@ -114,13 +154,12 @@ class GraphLocalizer:
         supporting = [AmpDeviceRef(ampId=a) for a in sorted(impaired)]
         # Clean boundary = clean amps immediately upstream of the impaired cluster.
         clean_boundary = self._clean_boundary(topology, impaired, clean)
-
         if common and common in clean:
             # impairment enters below a clean device -> span between them
             likely = LikelySourceLocation(
                 locationType="span",
                 description=f"Span downstream of clean amp {common} feeding impaired amps {sorted(impaired)}",
-                upstreamBoundaryDevice=AmpDeviceRef(ampId=common),
+                upstreamBoundaryDevice=topology.ref_for(common),
                 downstreamBoundaryDevice=AmpDeviceRef(ampId=sorted(impaired)[0]),
             )
             loc_type, desc, score = "span", likely.description, 0.85
@@ -136,8 +175,8 @@ class GraphLocalizer:
             anchor = common or sorted(impaired)[0]
             likely = LikelySourceLocation(
                 locationType="branch",
-                description=f"Branch at/under amp {anchor} (common point of impaired amps {sorted(impaired)})",
-                upstreamBoundaryDevice=AmpDeviceRef(ampId=anchor),
+                description=f"Branch at/under {anchor} (common point of impaired amps {sorted(impaired)})",
+                upstreamBoundaryDevice=topology.ref_for(anchor),
             )
             loc_type, desc, score = "branch", likely.description, 0.8
 

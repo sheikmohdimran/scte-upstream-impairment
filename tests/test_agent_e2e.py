@@ -77,3 +77,38 @@ def test_trace_is_serializable_and_holds_only_handles() -> None:
     assert "measurementRef" in js or "classificationSetRef" in js
     # raw trace arrays must never leak into the SLM-facing trace
     assert "maxHold" not in js and "average" not in js
+
+
+# ── Alarm-gated workflow entry ───────────────────────────────────────────────
+def _rpd_port_alarm() -> dict:
+    return {
+        "alarmId": "ALM-1", "severity": "major", "alarmType": "highUpstreamFecErrors",
+        "direction": "upstream",
+        "entity": {"type": "rpdPort", "rpdId": "RPD-9", "portId": "US4"},
+    }
+
+
+def _modem_alarm() -> dict:
+    return {
+        "alarmId": "ALM-2", "severity": "minor", "alarmType": "highCmTransmitPower",
+        "direction": "upstream",
+        "entity": {"type": "cableModem", "cmMacAddress": "00:15:96:a1:b2:c3"},
+    }
+
+
+def test_positive_alarm_triggers_and_seeds_rpd_port() -> None:
+    res = Orchestrator(MockMcpServer(_scenario()), "alarm-pos").run_from_alarm(_rpd_port_alarm())
+    assert res.status == "localized"
+    assert res.trigger is not None and res.trigger.verdict == "call"
+    # Step 1 was seeded from the alarm's rpdId/portId, not the scenario defaults.
+    rpd_call = next(c for c in res.trace.calls if c.tool == "getRPDSpectrumMeasurements")
+    assert rpd_call.arguments == {"rpdId": "RPD-9", "portId": "US4"}
+
+
+def test_negative_alarm_short_circuits_without_tool_calls() -> None:
+    res = Orchestrator(MockMcpServer(_scenario()), "alarm-neg").run_from_alarm(_modem_alarm())
+    assert res.status == "not_triggered"
+    assert res.trigger is not None and res.trigger.verdict == "noCall"
+    assert res.trace.calls == []
+    assert res.localization is None
+

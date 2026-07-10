@@ -1,0 +1,752 @@
+{
+  "name": "eval_CPD",
+  "evalCases": [
+    {
+      "id": "pos-01",
+      "description": "High upstream FEC errors, all channels, RPD port",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-N01-0042",
+          "portId": "US0"
+        }
+      },
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00117",
+        "severity": "major",
+        "timestamp": "2026-06-09T14:22:08Z",
+        "alarmType": "highUpstreamFecErrors",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-N01-0042",
+          "portId": "US0"
+        },
+        "metric": {
+          "name": "fecErrorRate",
+          "scope": "allChannels",
+          "unit": "errorsPerMinute",
+          "value": 0.2,
+          "threshold": 0.1
+        }
+      }
+    },
+    {
+      "id": "pos-02",
+      "description": "High upstream correctables, all channels, RPD port",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-E07-0118",
+          "portId": "US3"
+        }
+      },
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00203",
+        "severity": "minor",
+        "timestamp": "2026-06-09T14:25:31Z",
+        "alarmType": "highUpstreamCorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-E07-0118",
+          "portId": "US3"
+        },
+        "metric": {
+          "name": "correctableFecErrorRate",
+          "scope": "allChannels",
+          "unit": "errorsPerMinute",
+          "value": 0.15,
+          "threshold": 0.1
+        }
+      }
+    },
+    {
+      "id": "pos-03",
+      "description": "High upstream uncorrectables, all channels, RPD port",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-W03-0271",
+          "portId": "US1"
+        }
+      },
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00089",
+        "severity": "critical",
+        "timestamp": "2026-06-09T14:30:02Z",
+        "alarmType": "highUpstreamUncorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-W03-0271",
+          "portId": "US1"
+        },
+        "metric": {
+          "name": "uncorrectableFecErrorRate",
+          "scope": "allChannels",
+          "unit": "errorsPerMinute",
+          "value": 62,
+          "threshold": 10
+        }
+      }
+    },
+    {
+      "id": "pos-04",
+      "description": "High upstream correctables AND uncorrectables, all channels, RPD port",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-S12-0055",
+          "portId": "US2"
+        }
+      },
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00341",
+        "severity": "critical",
+        "timestamp": "2026-06-09T14:33:47Z",
+        "alarmType": "highUpstreamCorrectablesAndUncorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-S12-0055",
+          "portId": "US2"
+        },
+        "metric": {
+          "name": "correctableAndUncorrectableFecErrorRate",
+          "scope": "allChannels",
+          "unit": "errorsPerMinute",
+          "value": 390,
+          "threshold": 100
+        }
+      }
+    },
+    {
+      "id": "pos-05",
+      "description": "Same alarm type as pos-01 but different RPD — tests ID extraction, not memorization",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-N01-0198",
+          "portId": "US7"
+        }
+      },
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00455",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:01:12Z",
+        "alarmType": "highUpstreamFecErrors",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-N01-0198",
+          "portId": "US7"
+        },
+        "metric": {
+          "name": "fecErrorRate",
+          "scope": "allChannels",
+          "unit": "errorsPerMinute",
+          "value": 144,
+          "threshold": 100
+        }
+      }
+    },
+    {
+      "id": "neg-01a",
+      "description": "High CM TX power, single modem, no RPD context — easy negative",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00502",
+        "severity": "minor",
+        "timestamp": "2026-06-09T14:40:11Z",
+        "alarmType": "highCmTransmitPower",
+        "direction": "upstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:15:96:a1:b2:c3"
+        },
+        "metric": {
+          "name": "transmitPower",
+          "scope": "singleModem",
+          "unit": "dBmV",
+          "value": 58,
+          "threshold": 54
+        }
+      }
+    },
+    {
+      "id": "neg-01b",
+      "description": "High CM TX power, single modem, WITH serving RPD context — harder negative",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00503",
+        "severity": "minor",
+        "timestamp": "2026-06-09T14:40:44Z",
+        "alarmType": "highCmTransmitPower",
+        "direction": "upstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:15:96:d4:e5:f6",
+          "servingRpdId": "RPD-N01-0042",
+          "servingPortId": "US0"
+        },
+        "metric": {
+          "name": "transmitPower",
+          "scope": "singleModem",
+          "unit": "dBmV",
+          "value": 57.5,
+          "threshold": 54
+        }
+      }
+    },
+    {
+      "id": "neg-02a",
+      "description": "High downstream uncorrectables, single modem, no RPD context",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00610",
+        "severity": "major",
+        "timestamp": "2026-06-09T14:45:03Z",
+        "alarmType": "highDownstreamUncorrectables",
+        "direction": "downstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:22:10:7a:8b:9c"
+        },
+        "metric": {
+          "name": "uncorrectableFecErrorRate",
+          "scope": "singleModem",
+          "unit": "errorsPerMinute",
+          "value": 90,
+          "threshold": 20
+        }
+      }
+    },
+    {
+      "id": "neg-02b",
+      "description": "High downstream uncorrectables, single modem, WITH serving RPD context",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00611",
+        "severity": "major",
+        "timestamp": "2026-06-09T14:45:22Z",
+        "alarmType": "highDownstreamUncorrectables",
+        "direction": "downstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:22:10:3d:4e:5f",
+          "servingRpdId": "RPD-E07-0118",
+          "servingPortId": "US3"
+        },
+        "metric": {
+          "name": "uncorrectableFecErrorRate",
+          "scope": "singleModem",
+          "unit": "errorsPerMinute",
+          "value": 122,
+          "threshold": 20
+        }
+      }
+    },
+    {
+      "id": "neg-03",
+      "description": "High downstream correctables, same DS channel, multiple modems on RPD port — has rpdId/portId but wrong direction",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00718",
+        "severity": "major",
+        "timestamp": "2026-06-09T14:52:19Z",
+        "alarmType": "highDownstreamCorrectables",
+        "direction": "downstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-W03-0271",
+          "portId": "DS4"
+        },
+        "metric": {
+          "name": "correctableFecErrorRate",
+          "scope": "multipleModems",
+          "unit": "errorsPerMinute",
+          "value": 220,
+          "threshold": 80
+        }
+      }
+    },
+    {
+      "id": "neg-04",
+      "description": "High upstream TX power, MULTIPLE modems, RPD port — upstream + rpdId + portId but attenuation, not impairment. Hardest case.",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00829",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:05:38Z",
+        "alarmType": "highUpstreamTransmitPower",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-S12-0055",
+          "portId": "US2"
+        },
+        "metric": {
+          "name": "transmitPower",
+          "scope": "multipleModems",
+          "unit": "dBmV",
+          "value": 56.5,
+          "threshold": 54
+        }
+      }
+    },
+    {
+      "id": "neg-05",
+      "description": "Same as neg-04 but different RPD — confirms the SLM isn't keying on entity identity",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00830",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:06:02Z",
+        "alarmType": "highUpstreamTransmitPower",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-N01-0042",
+          "portId": "US0"
+        },
+        "metric": {
+          "name": "transmitPower",
+          "scope": "multipleModems",
+          "unit": "dBmV",
+          "value": 55.8,
+          "threshold": 54
+        }
+      }
+    },
+    {
+      "id": "neg-06",
+      "description": "High upstream utilization, RPD port — upstream + rpdId + portId but utilization is a capacity issue, not an impairment",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00840",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:10:15Z",
+        "alarmType": "highUpstreamUtilization",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-E07-0118",
+          "portId": "US3",
+          "serviceGroup": "SG-NORTH-042"
+        },
+        "metric": {
+          "name": "channelUtilization",
+          "scope": "allChannels",
+          "unit": "percent",
+          "value": 87.3,
+          "threshold": 80
+        }
+      }
+    },
+    {
+      "id": "neg-08",
+      "description": "High downstream uncorrectables, multiple CMs, same DS channel, RPD port — similar to neg-03 but uncorrectables",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00862",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:17:41Z",
+        "alarmType": "highDownstreamUncorrectables",
+        "direction": "downstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-S12-0055",
+          "portId": "DS2"
+        },
+        "metric": {
+          "name": "uncorrectableFecErrorRate",
+          "scope": "multipleModems",
+          "unit": "errorsPerMinute",
+          "value": 185,
+          "threshold": 40
+        }
+      }
+    },
+    {
+      "id": "neg-09",
+      "description": "Low downstream MER, multiple CMs, same DS channel — has rpdId/portId and channelId but downstream",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00871",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:19:53Z",
+        "alarmType": "lowDownstreamMer",
+        "direction": "downstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-W03-0271",
+          "portId": "DS1",
+          "channelId": "DC-22"
+        },
+        "metric": {
+          "name": "modulationErrorRatio",
+          "scope": "multipleModems",
+          "unit": "dB",
+          "value": 28.5,
+          "threshold": 33
+        }
+      }
+    },
+    {
+      "id": "neg-10",
+      "description": "High downstream channel utilization, RPD port — capacity issue, not impairment, downstream direction",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00880",
+        "severity": "minor",
+        "timestamp": "2026-06-09T15:25:11Z",
+        "alarmType": "highChannelUtilization",
+        "direction": "downstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-W03-0271",
+          "portId": "DS1"
+        },
+        "metric": {
+          "name": "channelUtilization",
+          "scope": "singleChannel",
+          "unit": "ratio",
+          "value": 0.91,
+          "threshold": 0.85
+        }
+      }
+    },
+    {
+      "id": "neg-11",
+      "description": "High upstream channel utilization, RPD port — upstream + rpdId + portId but capacity issue, not impairment",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00881",
+        "severity": "minor",
+        "timestamp": "2026-06-09T15:25:44Z",
+        "alarmType": "highChannelUtilization",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-S12-0055",
+          "portId": "US2"
+        },
+        "metric": {
+          "name": "channelUtilization",
+          "scope": "singleChannel",
+          "unit": "ratio",
+          "value": 0.88,
+          "threshold": 0.85
+        }
+      }
+    },
+    {
+      "id": "neg-12a",
+      "description": "Low downstream MER, single modem, no RPD context — modem-specific downstream issue",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "easy",
+      "alarm": {
+        "alarmId": "ALM-20260609-00890",
+        "severity": "minor",
+        "timestamp": "2026-06-09T15:32:07Z",
+        "alarmType": "lowDownstreamMer",
+        "direction": "downstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:17:ee:b3:44:a8"
+        },
+        "metric": {
+          "name": "modulationErrorRatio",
+          "scope": "singleModem",
+          "unit": "dB",
+          "value": 27.1,
+          "threshold": 33
+        }
+      }
+    },
+    {
+      "id": "neg-12b",
+      "description": "Low downstream MER, single modem, WITH serving RPD context — downstream + RPD fields present",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00891",
+        "severity": "minor",
+        "timestamp": "2026-06-09T15:32:29Z",
+        "alarmType": "lowDownstreamMer",
+        "direction": "downstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:17:ee:c5:66:d2",
+          "servingRpdId": "RPD-N01-0042",
+          "servingPortId": "US0"
+        },
+        "metric": {
+          "name": "modulationErrorRatio",
+          "scope": "singleModem",
+          "unit": "dB",
+          "value": 29.4,
+          "threshold": 33
+        }
+      }
+    },
+    {
+      "id": "neg-13",
+      "description": "High upstream correctables, single CM, with rpdId/portId/channelId — same metric type as positives but modem-specific, not port-wide",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00895",
+        "severity": "minor",
+        "timestamp": "2026-06-09T15:38:12Z",
+        "alarmType": "highUpstreamCorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:25:f2:a9:17:4c",
+          "servingRpdId": "RPD-E07-0118",
+          "servingPortId": "US3",
+          "channelId": "UC-4"
+        },
+        "metric": {
+          "name": "correctableFecErrorRate",
+          "scope": "singleModem",
+          "unit": "errorsPerMinute",
+          "value": 210,
+          "threshold": 60
+        }
+      }
+    },
+    {
+      "id": "neg-14",
+      "description": "High upstream uncorrectables, single CM, with rpdId/portId/channelId — same metric type as positives but modem-specific, not port-wide",
+      "expectedVerdict": "noCall",
+      "expectedToolCall": null,
+      "difficulty": "hard",
+      "alarm": {
+        "alarmId": "ALM-20260609-00896",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:38:45Z",
+        "alarmType": "highUpstreamUncorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "cableModem",
+          "cmMacAddress": "00:25:f2:bb:33:e1",
+          "servingRpdId": "RPD-S12-0055",
+          "servingPortId": "US2",
+          "channelId": "UC-9"
+        },
+        "metric": {
+          "name": "uncorrectableFecErrorRate",
+          "scope": "singleModem",
+          "unit": "errorsPerMinute",
+          "value": 38,
+          "threshold": 10
+        }
+      }
+    },
+    {
+      "id": "pos-06",
+      "description": "High upstream FEC errors, single channel, RPD port — SLM must ignore channelId",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-N01-0042",
+          "portId": "US0"
+        }
+      },
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00901",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:20:04Z",
+        "alarmType": "highUpstreamFecErrors",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-N01-0042",
+          "portId": "US0",
+          "channelId": "UC-3"
+        },
+        "metric": {
+          "name": "fecErrorRate",
+          "scope": "singleChannel",
+          "unit": "errorsPerMinute",
+          "value": 312,
+          "threshold": 100
+        }
+      }
+    },
+    {
+      "id": "pos-07",
+      "description": "High upstream correctables, single channel, RPD port — SLM must ignore channelId",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-W03-0271",
+          "portId": "US1"
+        }
+      },
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00902",
+        "severity": "minor",
+        "timestamp": "2026-06-09T15:22:17Z",
+        "alarmType": "highUpstreamCorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-W03-0271",
+          "portId": "US1",
+          "channelId": "UC-7"
+        },
+        "metric": {
+          "name": "correctableFecErrorRate",
+          "scope": "singleChannel",
+          "unit": "errorsPerMinute",
+          "value": 198,
+          "threshold": 60
+        }
+      }
+    },
+    {
+      "id": "pos-08",
+      "description": "High upstream uncorrectables, single channel, RPD port — SLM must ignore channelId",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-E07-0118",
+          "portId": "US3"
+        }
+      },
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00903",
+        "severity": "critical",
+        "timestamp": "2026-06-09T15:25:33Z",
+        "alarmType": "highUpstreamUncorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-E07-0118",
+          "portId": "US3",
+          "channelId": "UC-1"
+        },
+        "metric": {
+          "name": "uncorrectableFecErrorRate",
+          "scope": "singleChannel",
+          "unit": "errorsPerMinute",
+          "value": 45,
+          "threshold": 10
+        }
+      }
+    },
+    {
+      "id": "pos-09",
+      "description": "High upstream correctables AND uncorrectables, single channel, RPD port — SLM must ignore channelId",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-S12-0055",
+          "portId": "US2"
+        }
+      },
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00904",
+        "severity": "critical",
+        "timestamp": "2026-06-09T15:28:49Z",
+        "alarmType": "highUpstreamCorrectablesAndUncorrectables",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-S12-0055",
+          "portId": "US2",
+          "channelId": "UC-12"
+        },
+        "metric": {
+          "name": "correctableAndUncorrectableFecErrorRate",
+          "scope": "singleChannel",
+          "unit": "errorsPerMinute",
+          "value": 275,
+          "threshold": 100
+        }
+      }
+    },
+    {
+      "id": "pos-10",
+      "description": "High upstream FEC errors, single channel, different RPD — tests ID extraction with channelId present",
+      "expectedVerdict": "call",
+      "expectedToolCall": {
+        "name": "getRPDSpectrumMeasurements",
+        "arguments": {
+          "rpdId": "RPD-N01-0198",
+          "portId": "US7"
+        }
+      },
+      "difficulty": "medium",
+      "alarm": {
+        "alarmId": "ALM-20260609-00905",
+        "severity": "major",
+        "timestamp": "2026-06-09T15:31:05Z",
+        "alarmType": "highUpstreamFecErrors",
+        "direction": "upstream",
+        "entity": {
+          "type": "rpdPort",
+          "rpdId": "RPD-N01-0198",
+          "portId": "US7",
+          "channelId": "UC-5"
+        },
+        "metric": {
+          "name": "fecErrorRate",
+          "scope": "singleChannel",
+          "unit": "errorsPerMinute",
+          "value": 157,
+          "threshold": 100
+        }
+      }
+    }
+  ]
+}

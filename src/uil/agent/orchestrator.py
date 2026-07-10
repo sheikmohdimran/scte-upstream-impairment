@@ -15,26 +15,63 @@ from typing import Any, Optional
 
 from uil.agent.handoff import build_handoff_summary
 from uil.agent.trace import ToolCallTrace
+from uil.agent.trace_store import TraceStore
+from uil.agent.trigger import AlarmTrigger, TriggerDecision
 from uil.mcp_server.server import MockMcpServer
 
 
 @dataclass
 class OrchestratorResult:
-    status: str  # localized | low_confidence | escalated | failed
+    status: str  # localized | low_confidence | escalated | failed | not_triggered
     localization: Optional[dict[str, Any]] = None
     handoff_markdown: Optional[str] = None
     trace: ToolCallTrace = field(default_factory=lambda: ToolCallTrace(scenario=""))
+    trigger: Optional[TriggerDecision] = None
 
 
 class Orchestrator:
-    def __init__(self, server: MockMcpServer, scenario_name: str = "scenario", max_remeasure: int = 1) -> None:
+    def __init__(self, server: MockMcpServer, scenario_name: str = "scenario", max_remeasure: int = 1,
+                 trace_store: Optional[TraceStore] = None) -> None:
         self.s = server
         self.name = scenario_name
         self.max_remeasure = max_remeasure
+        # Audit sink: durable append-only record of every run (regulatory requirement).
+        self.trace_store = trace_store if trace_store is not None else TraceStore()
+        self._trigger: Optional[dict[str, Any]] = None
 
-    def run(self) -> OrchestratorResult:
+    def _record(self, trace: ToolCallTrace) -> None:
+        extra = {"trigger": self._trigger} if self._trigger is not None else None
+        self.trace_store.record(trace, extra=extra)
+
+    def run_from_alarm(self, alarm: dict) -> OrchestratorResult:
+        """Workflow entry: gate the alarm, then run the sequence only if it should trigger.
+
+        Positive alarm -> seed step 1 with the alarm's ``rpdId``/``portId`` and run.
+        Negative alarm -> short-circuit with status ``not_triggered`` and no tool calls.
+        """
+        decision = AlarmTrigger().evaluate(alarm)
+        if not decision.should_trigger:
+            trace = ToolCallTrace(scenario=self.name)
+            trace.final_status = "not_triggered"
+            self._trigger = {
+                "verdict": decision.verdict, "reason": decision.reason,
+                "alarmId": alarm.get("alarmId"), "alarmType": alarm.get("alarmType"),
+            }
+            self._record(trace)
+            return OrchestratorResult(status="not_triggered", trace=trace, trigger=decision)
+        args = decision.tool_call["arguments"]
+        self._trigger = {
+            "verdict": decision.verdict, "reason": decision.reason,
+            "alarmId": alarm.get("alarmId"), "alarmType": alarm.get("alarmType"),
+        }
+        result = self.run(rpd_id=args["rpdId"], port_id=args["portId"])
+        result.trigger = decision
+        return result
+
+    def run(self, rpd_id: Optional[str] = None, port_id: Optional[str] = None) -> OrchestratorResult:
         trace = ToolCallTrace(scenario=self.name)
-        rpd_id, port_id = self.s.scn.rpdId, self.s.scn.portId
+        rpd_id = rpd_id or self.s.scn.rpdId
+        port_id = port_id or self.s.scn.portId
 
         # --- Step 1: RPD spectrum (with bounded re-measure on transient errors) ---
         rpd_meas_ref = None
@@ -112,6 +149,7 @@ class Orchestrator:
             return self._escalate(trace, "Localization is low-confidence (multi-anomaly or missing data).",
                                   "low_confidence", r6)
         trace.final_status = "localized"
+        self._record(trace)
         return OrchestratorResult(status="localized", localization=r6, trace=trace)
 
     def _escalate(self, trace: ToolCallTrace, reason: str, status: str,
@@ -119,6 +157,7 @@ class Orchestrator:
         trace.final_status = "escalated" if status != "failed" else "failed"
         trace.label = "negative"
         md = build_handoff_summary(self.name, trace, reason, localization)
+        self._record(trace)
         return OrchestratorResult(status=status, localization=localization, handoff_markdown=md, trace=trace)
 
 

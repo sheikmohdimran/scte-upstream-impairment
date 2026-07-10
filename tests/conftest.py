@@ -1,9 +1,14 @@
 """Shared pytest fixtures."""
 
+import os
 import sys
 from pathlib import Path
 
 import pytest
+
+# Do not write audit traces to disk during the test suite; the dedicated
+# tests/test_trace_store.py re-enables persistence into a tmp directory.
+os.environ.setdefault("UIL_TRACE_DISABLE", "1")
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
