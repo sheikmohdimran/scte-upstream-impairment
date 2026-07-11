@@ -11,16 +11,14 @@ and passive *devices* remain as nodes.
 ASSUMPTIONS (isolated here on purpose; tracked in docs/operations/open-decisions.md).
 Change these here — nothing else in the localizer should hard-code plant semantics.
 
-    A1. Root anchor: the ``RfSource`` node (the fiber node / RPD location) is the upstream
-        root. Impairments propagate upstream toward it. Confirmed by transcript
-        (Randy/Irene) that a topology tool exists; the RPD<->RfSource binding is NOT yet
-        confirmed by CableLabs — see CLARIFICATION C1.
+    A1. Root anchor: ``rpdId`` identifies an ``RfSource`` node (the fiber node / RPD
+        location). Impairments propagate upstream toward it. Confirmed by the extracted
+        CableLabs server implementation.
     A2. Edge orientation is DOWNSTREAM (source -> target flows away from the headend toward
         subscribers). We reverse it to build upstream parent links. Verified against both
         sample files (RfSource has only outgoing edges).
-    A3. Segment scope: the whole graph under the root is treated as one segment/leg. Per
-        ``portId`` slicing (one RfSource may have several ports/legs) is NOT yet wired —
-        see CLARIFICATION C2.
+    A3. Segment scope: ``portId`` selects a direct ``RfPort`` child of the RPD; only that
+        port's downstream descendants are included. Confirmed by the extracted server.
     A4. Roles by component ``type``:
           - measured devices  : RfAmp                      -> node, deviceType "AMP"
           - passive devices   : RfSplitter/RfTap/RfCoupler/RfPowerInserter -> node, kept
@@ -31,8 +29,7 @@ Change these here — nothing else in the localizer should hard-code plant seman
           - root              : RfSource                   -> node, deviceType "RPD"
         Unknown/other types are treated as pass-through connectors (defensive default).
     A5. Device identity is the component ``id`` (strings like "0000000017"). ``name`` is
-        carried through for human-readable handoff only. Whether the real amp identifier
-        is ``id`` or ``name`` is NOT confirmed — see CLARIFICATION C3.
+        carried through for human-readable handoff only. Confirmed by scenarios/stores/tools.
 """
 
 from __future__ import annotations
@@ -46,6 +43,10 @@ AMP_TYPES = {"RfAmp"}
 PASSIVE_TYPES = {"RfSplitter", "RfTap", "RfCoupler", "RfPowerInserter"}
 CONNECTOR_TYPES = {"RfPort", "RfCable"}
 LEAF_TYPES = {"device"}
+
+
+class InvalidRpdPortError(ValueError):
+    """Raised when an RPD source or its requested direct port cannot be resolved."""
 
 
 @dataclass
@@ -79,7 +80,11 @@ def _cable_length(component: dict) -> float:
         return 0.0
 
 
-def parse_data_package(doc: dict) -> dict:
+def parse_data_package(
+    doc: dict,
+    rpd_id: Optional[str] = None,
+    port_id: Optional[str] = None,
+) -> dict:
     """Return ``{"rootId": str | None, "nodes": {id: PlantNode}}``.
 
     Connectors (ports/cables) and leaf homes are collapsed away; cable ``length`` is
@@ -98,6 +103,51 @@ def parse_data_package(doc: dict) -> dict:
             downstream.setdefault(s, []).append(t)
             indeg[t] = indeg.get(t, 0) + 1
 
+    if (rpd_id is None) != (port_id is None):
+        raise ValueError("rpd_id and port_id must be provided together")
+
+    scoped_root: Optional[str] = None
+    if rpd_id is not None and port_id is not None:
+        scoped_root = next(
+            (
+                cid for cid, component in components.items()
+                if str(cid) == str(rpd_id) and component.get("type") in ROOT_TYPES
+            ),
+            None,
+        )
+        if scoped_root is None:
+            raise InvalidRpdPortError(f"RPD source not found: {rpd_id!r}")
+
+        matching_ports = [
+            child for child in downstream.get(scoped_root, [])
+            if components[child].get("type") == "RfPort"
+            and str(components[child].get("portId")) == str(port_id)
+        ]
+        if len(matching_ports) != 1:
+            raise InvalidRpdPortError(
+                f"RPD {rpd_id!r} port {port_id!r} not found or ambiguous"
+            )
+
+        selected_port = matching_ports[0]
+        scoped_ids = {scoped_root, selected_port}
+        stack = [selected_port]
+        while stack:
+            current = stack.pop()
+            for child in downstream.get(current, []):
+                if child not in scoped_ids:
+                    scoped_ids.add(child)
+                    stack.append(child)
+        components = {cid: component for cid, component in components.items() if cid in scoped_ids}
+        downstream = {
+            cid: [child for child in children if child in scoped_ids]
+            for cid, children in downstream.items()
+            if cid in scoped_ids
+        }
+        indeg = {cid: 0 for cid in components}
+        for children in downstream.values():
+            for child in children:
+                indeg[child] += 1
+
     def _type(cid: str) -> str:
         return components.get(cid, {}).get("type", "")
 
@@ -106,7 +156,9 @@ def parse_data_package(doc: dict) -> dict:
         return t in ROOT_TYPES or t in AMP_TYPES or t in PASSIVE_TYPES
 
     # Roots: prefer RfSource; fall back to any significant node with no incoming edge (A1).
-    roots = [cid for cid in components if _type(cid) in ROOT_TYPES and indeg.get(cid, 0) == 0]
+    roots = [scoped_root] if scoped_root is not None else [
+        cid for cid in components if _type(cid) in ROOT_TYPES and indeg.get(cid, 0) == 0
+    ]
     if not roots:
         roots = [cid for cid in components if _type(cid) in ROOT_TYPES]
     if not roots:

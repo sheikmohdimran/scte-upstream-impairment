@@ -26,7 +26,7 @@ from uil.domain.localization import (
     LocalizationResult,
     RecommendedNextAction,
 )
-from uil.domain.refs import AmpDeviceRef, PlantDeviceRef, RpdDeviceRef
+from uil.domain.refs import AmpDeviceRef, RpdDeviceRef
 from uil.localizer.plant_topology import parse_data_package
 
 
@@ -66,7 +66,7 @@ class Topology:
         common point can land on them; connectors (ports/cables) and subscriber homes are
         collapsed away. See :mod:`uil.localizer.plant_topology` for the parsing assumptions.
         """
-        parsed = parse_data_package(doc)
+        parsed = parse_data_package(doc, rpd_id=rpd_id, port_id=port_id)
         nodes = {
             nid: AmpNode(
                 ampId=nid,
@@ -83,17 +83,25 @@ class Topology:
     @property
     def amp_ids(self) -> list[str]:
         """Ids of measured (RfAmp) devices only — passives/root are excluded."""
-        return [nid for nid, n in self.amps.items() if n.deviceType == "AMP"]
+        return sorted(nid for nid, n in self.amps.items() if n.deviceType == "AMP")
 
     def ref_for(self, node_id: str):
-        """Build the right device ref for a node (amp vs passive vs RPD root)."""
+        """Build a wire-compatible ref for a node.
+
+        Passive nodes stay in the graph for common-point analysis, but the public MCP
+        contract permits only measurable RPD/AMP references. Walk upstream to the nearest
+        measurable ancestor when the internal common point is passive.
+        """
         node = self.amps.get(node_id)
-        dtype = node.deviceType if node else "AMP"
-        if dtype == "RPD":
-            return RpdDeviceRef(rpdId=self.rpdId, portId=self.portId)
-        if dtype == "AMP":
-            return AmpDeviceRef(ampId=node_id)
-        return PlantDeviceRef(deviceType=dtype, deviceId=node_id, name=node.name if node else None)
+        seen: set[str] = set()
+        while node is not None and node.ampId not in seen:
+            seen.add(node.ampId)
+            if node.deviceType == "RPD":
+                return RpdDeviceRef(rpdId=self.rpdId, portId=self.portId)
+            if node.deviceType == "AMP":
+                return AmpDeviceRef(ampId=node.ampId)
+            node = self.amps.get(node.parentId) if node.parentId else None
+        return RpdDeviceRef(rpdId=self.rpdId, portId=self.portId)
 
     def path_to_rpd(self, amp_id: str) -> list[str]:
         """Amp ids from ``amp_id`` up to (and excluding) the RPD root."""
