@@ -34,17 +34,21 @@ fixed set of measurement/analysis tools. You only ever see opaque handles and co
 raw spectra.
 
 Follow this happy-path sequence, but adapt when tools return errors or partial results:
-  1. getRPDSpectrumMeasurements(rpdId, portId) -> a measurementId for the RPD.
+  1. getRPDSpectrumMeasurements() -> a measurementId for the RPD port under investigation.
   2. analyzeSpectrumMeasurements(measurementIds=[that id]) -> a classificationSetRef for the
      RPD plus impairedCount and classesPresent. If impairedCount == 0 the segment looks clean;
      stop and report that (the fault may be intermittent).
-  3. getAllAmpsInSegment(rpdId, portId) -> an ampListRef and ampCount for the whole leg.
-  4. getAmpSpectrumMeasurements(ampListRef=that ref) -> a measurementSetRef. This may come back
+  3. getAllAmpsInSegment() -> an ampListRef and ampCount for the whole leg.
+  4. getAmpUpstreamSpectrumMeasurements(ampListRef=that ref) -> a measurementSetRef. This may come back
      as partial_success with a failedCount; that is acceptable - proceed with what was measured.
   5. analyzeSpectrumMeasurements(measurementSetRef=that ref) -> a classificationSetRef for the amps.
-  6. localizeUpstreamSpectrumImpairmentSource(rpdId, portId, impairmentType,
+  6. localizeUpstreamSpectrumImpairmentSource(impairmentType,
      classificationSetRefs=[the RPD set from step 2, the amp set from step 5]) -> the result.
      Use the dominant non-Clean label from step 2's classesPresent as impairmentType.
+
+The target RPD port is already bound to the tools by the harness: you do NOT pass rpdId or
+portId to any tool, and you never invent or reformat device identifiers. Pass each handle a
+tool returns verbatim to the next tool.
 
 Recovery rules:
   - On a transient error (STALE_DATA_ONLY, MEASUREMENT_UNAVAILABLE) retry the SAME call ONCE.
@@ -54,15 +58,14 @@ Recovery rules:
     labels, or missing measurements), do NOT keep calling tools; escalate to a human.
 
 When you are done, reply with a final plain-text summary that states: the impairmentType, the
-localizationStatus, the confidence, and the likely source description (or, if you stopped early,
-why you escalated). Do not call any more tools after that.
+localizationStatus, the confidence, and the likely source (the top candidate's boundary devices)
+(or, if you stopped early, why you escalated). Do not call any more tools after that.
 """
 
 
-# --- SLM-facing tool argument schemas (handles only; no nested objects) ---------------------
-class _RpdArgs(BaseModel):
-    rpdId: str = Field(description="RPD identifier, e.g. 'RPD-1'.")
-    portId: str = Field(description="Upstream port identifier, e.g. 'P1'.")
+# --- SLM-facing tool argument schemas (handles only; no device identifiers) -----------------
+class _NoArgs(BaseModel):
+    """No arguments. rpdId/portId are bound at agent construction, never chosen by the SLM."""
 
 
 class _AnalyzeArgs(BaseModel):
@@ -74,20 +77,13 @@ class _AnalyzeArgs(BaseModel):
     )
 
 
-class _AllAmpsArgs(BaseModel):
-    rpdId: str
-    portId: str
-
-
 class _AmpMeasArgs(BaseModel):
     ampListRef: Optional[str] = Field(default=None, description="Amp-list handle from getAllAmpsInSegment.")
     ampIds: Optional[list[str]] = Field(default=None, description="Explicit amp ids (alternative to ampListRef).")
 
 
 class _LocalizeArgs(BaseModel):
-    rpdId: str
-    portId: str
-    impairmentType: str = Field(description="Dominant non-Clean impairment label, e.g. 'CPD'.")
+    impairmentType: str = Field(description="Dominant non-Clean impairment label from step 2's classesPresent.")
     classificationSetRefs: list[str] = Field(description="[RPD classificationSetRef, amp classificationSetRef].")
 
 
@@ -97,9 +93,14 @@ class McpToolset:
     Records every call into a :class:`ToolCallTrace` and remembers the final localization.
     """
 
-    def __init__(self, server: MockMcpServer, trace: ToolCallTrace) -> None:
+    def __init__(self, server: MockMcpServer, trace: ToolCallTrace,
+                 rpd_id: Optional[str] = None, port_id: Optional[str] = None) -> None:
         self.s = server
         self.trace = trace
+        # rpdId/portId are bound deterministically (from the alarm/run context), never supplied
+        # by the SLM — this eliminates long-id hallucination in tool arguments.
+        self.rpd_id = rpd_id if rpd_id is not None else server.scn.rpdId
+        self.port_id = port_id if port_id is not None else server.scn.portId
         self.last_localization: Optional[dict[str, Any]] = None
 
     def _record(self, tool: str, arguments: dict[str, Any], result: dict[str, Any]) -> str:
@@ -112,14 +113,14 @@ class McpToolset:
         )
         return json.dumps(result)
 
-    def get_rpd_spectrum(self, rpdId: str, portId: str) -> str:
-        r = self.s.getRPDSpectrumMeasurements(rpdId, portId)
+    def get_rpd_spectrum(self) -> str:
+        r = self.s.getRPDSpectrumMeasurements(self.rpd_id, self.port_id)
         if r.get("status") == "success":
             ref = r["measurementRef"]
             out = {"status": "success", "measurementId": ref["measurementId"], "deviceType": ref["deviceType"]}
         else:
             out = r
-        return self._record("getRPDSpectrumMeasurements", {"rpdId": rpdId, "portId": portId}, out)
+        return self._record("getRPDSpectrumMeasurements", {"rpdId": self.rpd_id, "portId": self.port_id}, out)
 
     def analyze_spectrum(
         self, measurementIds: Optional[list[str]] = None, measurementSetRef: Optional[str] = None
@@ -131,20 +132,20 @@ class McpToolset:
         args = {"measurementIds": measurementIds, "measurementSetRef": measurementSetRef}
         return self._record("analyzeSpectrumMeasurements", args, r)
 
-    def get_all_amps(self, rpdId: str, portId: str) -> str:
-        r = self.s.getAllAmpsInSegment(rpdId, portId)
-        return self._record("getAllAmpsInSegment", {"rpdId": rpdId, "portId": portId}, r)
+    def get_all_amps(self) -> str:
+        r = self.s.getAllAmpsInSegment(self.rpd_id, self.port_id)
+        return self._record("getAllAmpsInSegment", {"rpdId": self.rpd_id, "portId": self.port_id}, r)
 
     def get_amp_spectra(self, ampListRef: Optional[str] = None, ampIds: Optional[list[str]] = None) -> str:
-        r = self.s.getAmpSpectrumMeasurements(ampListRef=ampListRef, ampIds=ampIds)
-        return self._record("getAmpSpectrumMeasurements", {"ampListRef": ampListRef, "ampIds": ampIds}, r)
+        r = self.s.getAmpUpstreamSpectrumMeasurements(ampListRef=ampListRef, ampIds=ampIds)
+        return self._record("getAmpUpstreamSpectrumMeasurements", {"ampListRef": ampListRef, "ampIds": ampIds}, r)
 
-    def localize(self, rpdId: str, portId: str, impairmentType: str, classificationSetRefs: list[str]) -> str:
-        r = self.s.localizeUpstreamSpectrumImpairmentSource(rpdId, portId, impairmentType, classificationSetRefs)
+    def localize(self, impairmentType: str, classificationSetRefs: list[str]) -> str:
+        r = self.s.localizeUpstreamSpectrumImpairmentSource(self.rpd_id, self.port_id, impairmentType, classificationSetRefs)
         if r.get("status") == "success":
             self.last_localization = r
         args = {
-            "rpdId": rpdId, "portId": portId, "impairmentType": impairmentType,
+            "rpdId": self.rpd_id, "portId": self.port_id, "impairmentType": impairmentType,
             "classificationSetRefs": classificationSetRefs,
         }
         return self._record("localizeUpstreamSpectrumImpairmentSource", args, r)
@@ -157,8 +158,8 @@ def build_tools(toolset: McpToolset) -> list:
     return [
         StructuredTool.from_function(
             func=toolset.get_rpd_spectrum, name="getRPDSpectrumMeasurements",
-            description="Capture the upstream spectrum at an RPD port. Returns a measurementId.",
-            args_schema=_RpdArgs,
+            description="Capture the upstream spectrum at the RPD port under investigation (already bound; takes no arguments). Returns a measurementId.",
+            args_schema=_NoArgs,
         ),
         StructuredTool.from_function(
             func=toolset.analyze_spectrum, name="analyzeSpectrumMeasurements",
@@ -171,11 +172,11 @@ def build_tools(toolset: McpToolset) -> list:
         ),
         StructuredTool.from_function(
             func=toolset.get_all_amps, name="getAllAmpsInSegment",
-            description="List every amplifier in the RPD leg (one-shot, not recursive). Returns an ampListRef.",
-            args_schema=_AllAmpsArgs,
+            description="List every amplifier in the bound RPD leg (one-shot, not recursive; takes no arguments). Returns an ampListRef and ampCount.",
+            args_schema=_NoArgs,
         ),
         StructuredTool.from_function(
-            func=toolset.get_amp_spectra, name="getAmpSpectrumMeasurements",
+            func=toolset.get_amp_spectra, name="getAmpUpstreamSpectrumMeasurements",
             description=(
                 "Capture upstream spectra at all amps via an ampListRef. May return partial_success "
                 "with a failedCount. Returns a measurementSetRef."
@@ -186,7 +187,8 @@ def build_tools(toolset: McpToolset) -> list:
             func=toolset.localize, name="localizeUpstreamSpectrumImpairmentSource",
             description=(
                 "Run common-point localization over the pooled RPD + amp classification sets. "
-                "Returns the likely source location and localizationStatus."
+                "Returns candidateLocations with upstream/downstream boundary devices and "
+                "localizationStatus."
             ),
             args_schema=_LocalizeArgs,
         ),
@@ -274,6 +276,10 @@ class LangGraphAgent:
                 localization=None, trace=self.trace, messages=[],
             )
         args = decision.tool_call["arguments"]
+        # Deterministically bind the alarm's rpdId/portId into the tools so the SLM never
+        # supplies (or hallucinates) them as arguments.
+        self.toolset.rpd_id = args["rpdId"]
+        self.toolset.port_id = args["portId"]
         alarm_goal = goal or (
             f"An upstream impairment alarm ({alarm.get('alarmType')}) fired on RPD "
             f"{args['rpdId']} port {args['portId']}. Localize the physical source and report it."
@@ -333,8 +339,9 @@ def _main() -> None:
     result = agent.run()
     print("=== FINAL MESSAGE ===\n" + result.final_message)
     print(f"\nlocalization status: {result.trace.final_status}")
-    if result.localization and result.localization.get("likelySourceLocation"):
-        print("likely source:", result.localization["likelySourceLocation"]["description"])
+    if result.localization and result.localization.get("candidateLocations"):
+        top = result.localization["candidateLocations"][0]
+        print("top candidate:", top.get("description") or top.get("locationType"))
     print(f"\n=== TOOL CALLS ({len(result.trace.calls)}) ===")
     for c in result.trace.calls:
         print(f"  {c.step}. {c.tool:42} {c.outcome}")
