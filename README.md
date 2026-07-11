@@ -52,8 +52,12 @@ Contract details are documented in `docs/architecture/contract-and-data-surfaces
   owned separately; coordinate on that interface.
 - CPD signature is provisional (floor rise, comb spacing, and band extent).
 - Topology is now parsed from the CableLabs plant data-package (`components[]` + `edges[]`)
-  via `src/uil/localizer/plant_topology.py`; the localizer common point may be a passive
-  device (splitter/tap/coupler). Binding assumptions C1–C3 tracked in open-decisions.
+	via `src/uil/localizer/plant_topology.py`. The extracted CableLabs server confirms that it
+	loads the whole graph, resolves the RPD port, then scopes internally to that port's
+	descendants. The data-package is server configuration, not a tool response.
+- **Contract mismatch to resolve:** our localizer can emit `PlantDeviceRef`, but both current
+	shared `deviceRef` schemas permit only RPD/AMP. Passive nodes are structural graph nodes;
+	their public output semantics need agreement before deployment.
 - `impairmentType` selection rule for step 6 currently uses dominant non-Clean signal.
 - Rule-based classifier is scaffolding; production accuracy depends on CNN integration.
 
@@ -75,6 +79,21 @@ Entry points: `Orchestrator.run_from_alarm(alarm)` (deterministic oracle) and
 `LangGraphAgent.run_from_alarm(alarm)` (SLM, skips model invocation on obvious negatives).
 The gate is validated against the CableLabs `eval_CPD` alarm set (26 cases, all passing) in
 `tests/test_trigger_eval.py`.
+
+## SLM Evaluation Harness
+
+The SLM's orchestration is graded against randomized scenarios with a *known planted fault*
+(the ground truth), independent of the deterministic localizer. Each case plants a CPD fault in
+a random amplifier tree, then checks whether the agent triggers correctly, drives the fixed
+6-step chain in order, recovers from errors/partial results, and steers the localizer to the
+correct fault. The classification/localization math is deterministic, so this tests
+*orchestration* — the SLM's actual job — even while the spectrum generator / CNN is still open.
+
+- Generator + grader: `src/uil/eval/` (`generator.py`, `grader.py`).
+- Offline self-check (no LLM): `tests/test_eval_harness.py` — the deterministic `Orchestrator`
+  must match every case's ground truth.
+- Live SLM grading: `examples/eval_slm.py` / `make eval-slm PER=3 SEED=0`.
+- Design, assumptions, and output: `docs/architecture/evaluation-harness.md`.
 
 ## Audit Trace Persistence (Regulatory)
 
@@ -102,12 +121,12 @@ Tests: `tests/test_trace_store.py` (recording, append/chain, tamper detection, r
 	- Final CPD spectral signature parameters.
 	- CNN reuse/training details and 7-class to 9-label mapping.
 	- Confidence calibration semantics for clean vs impaired thresholds.
-- Randy (topology tool + trigger **now sampled/confirmed**; bindings still open):
-	- C1: how `rpdId`/`portId` binds to the plant graph (assumed `RfSource`≈RPD, `portId`
-	  picks an `RfPort` subtree).
-	- C2: whole-plant vs pre-sliced per-segment subgraph at the tool boundary.
-	- C3: amp identity — component `id` vs `name`.
+- Randy (topology bindings **implementation-confirmed** from `slm-main.zip`):
+	- C1: `rpdId` = `RfSource`; `portId` resolved by `find_rpd_port_node`.
+	- C2: whole graph loaded; each tool scopes to `descendants(rpd_port_node)`.
+	- C3: amp identity = numeric component `id`, not `name`.
 	- C4: alarm transport (SNMP trap vs Kafka).
+	- Decide whether passive nodes may appear as public boundary refs or remain structural only.
 	- OpenShift/OCP validation timeline and scale expectations.
 - Randy + Irene:
 	- Error taxonomy completeness and `partial_success` contract confirmation.
@@ -120,14 +139,15 @@ Decision tracker: `docs/operations/open-decisions.md`.
 | Path | Purpose |
 |------|---------|
 | `schemas/tools/` | Vendored MCP JSON schemas (reference and raw surfaces) |
-| `src/uil/domain/` | Pydantic schema mirrors (incl. `PlantDeviceRef` for passive devices) |
+| `src/uil/domain/` | Pydantic schema mirrors (`PlantDeviceRef` currently pending contract alignment) |
 | `src/uil/sim/` | Upstream spectrum simulator |
 | `src/uil/classifier/` | Bootstrap rule classifier + CNN path |
 | `src/uil/localizer/` | Graph-theory localizer + `plant_topology.py` data-package parser |
 | `src/uil/mcp_server/` | Mock MCP server and handle store |
 | `src/uil/agent/` | Orchestrator, LangGraph agent, alarm `trigger.py`, `trace_store.py` (audit), traces, handoff |
+| `src/uil/eval/` | SLM evaluation harness: random scenario generator + ground-truth grader |
 | `tests/` | Conformance, simulator, localizer, topology, trigger, E2E tests |
-| `tests/fixtures/` | Real CableLabs samples: `alarms_eval.json`, `network-topology-example-*.json` |
+| `tests/fixtures/` | CableLabs alarm/topology samples (topology fixtures should be replaced by declared example/test plants) |
 | `docs/` | `corrected-plan.md`, `project-memory.md`, architecture + operations notes |
 
 ## Demo Quickstart
@@ -145,6 +165,9 @@ export SLM_MODEL=<served-model-name>
 export OPENAI_API_KEY=EMPTY
 make agent-demo
 
+# Grade the SLM on randomized scenarios with known ground truth (same endpoint env)
+make eval-slm PER=3 SEED=0
+
 # Audit traces are written to ./traces/ by default; redirect or disable:
 export UIL_TRACE_DIR=/var/log/uil/traces   # optional
 # export UIL_TRACE_DISABLE=1                # optional: turn off persistence
@@ -160,7 +183,7 @@ Scenario 2: partial_success + escalation -> low_confidence
 ## Current Status
 
 - POC runs end-to-end on synthetic CPD data, entered via the alarm-trigger gate.
-- **Test suite: 132 passing, 2 skipped.**
+- **Test suite: 171 passing, 0 skipped.**
 - Implemented since baseline:
 	- Alarm-trigger gate (`src/uil/agent/trigger.py`) — perfect on the 26-case `eval_CPD` set;
 	  wired into both `Orchestrator.run_from_alarm` and `LangGraphAgent.run_from_alarm`.
@@ -169,10 +192,16 @@ Scenario 2: partial_success + escalation -> low_confidence
 	- Passive-aware localizer: common point can be a splitter/tap/coupler (`PlantDeviceRef`).
 	- `getAllAmpsInSegment`/localize accept a real topology doc (`Scenario.topology_doc`).
 	- Tamper-evident, daily-rotated audit trace persistence (`trace_store.py`), on by default.
+	- SLM evaluation harness (`src/uil/eval/`): seeded random scenarios with independent
+	  ground truth + a rubric grader; gemma4 scores 27/27 on the CPD suite (see
+	  `docs/architecture/evaluation-harness.md`).
 - Next focus:
 	- CNN integration behind `analyzeSpectrumMeasurements` (owned separately; 5-184 MHz / dBuV).
-	- Update `schemas/tools/raw/getAllAmpsInSegment.schema.json` to the data-package shape.
-	- Per-`portId` segment slicing; server e2e over a full real plant (needs label injection).
-	- Confirm CableLabs bindings C1–C4 (see `docs/operations/open-decisions.md`).
+	- Align MCP schemas/output models with the current extracted shared contract, especially
+	  passive refs, handle-vs-inline localization evidence, and `getAllAmpsInSegment` fields.
+	- Adopt the 211 coherent scenario overlays for full-plant e2e tests and replace topology
+	  fixtures with the declared example/test plants.
+	- Validate the extracted in-process/HTTP adapters and FastMCP server against current `main`.
+	- C4 alarm transport and passive-node output policy remain open (see open-decisions).
 
 Execution tracker: `EXECUTION_STEPS.md`.

@@ -55,8 +55,9 @@ LangGraph + SLM; needs `SLM_BASE_URL`/`SLM_MODEL`).
 - CPD spectral signature spec (Irene) → tightens Step 3.
 - ~~`getAllAmpsInSegment` topology (Randy) → confirms Step 6 inputs.~~ **RESOLVED**: real
   plant data-package samples provided; parser in `src/uil/localizer/plant_topology.py`
-  (components + edges, passive-aware common point). Binding details C1–C3 in
-  `docs/operations/open-decisions.md` still open (non-blocking).
+  (components + edges). Extracted server implementation confirms C1–C3: RPD source + port
+  binding, internal descendant scoping, and component-id amp identity. Passive-ref wire
+  semantics and schema alignment remain open; see `docs/operations/open-decisions.md`.
 - Trigger contract (Randy): **semantics RESOLVED** via `alarms.json` → gate in
   `src/uil/agent/trigger.py`; wired into `Orchestrator.run_from_alarm` /
   `LangGraphAgent.run_from_alarm`; transport (SNMP trap / Kafka) still open → Phase 4.
