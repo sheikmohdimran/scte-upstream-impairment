@@ -180,28 +180,5 @@ Scenario 1: full localization -> localized
 Scenario 2: partial_success + escalation -> low_confidence
 ```
 
-## Current Status
-
-- POC runs end-to-end on synthetic CPD data, entered via the alarm-trigger gate.
-- **Test suite: 171 passing, 0 skipped.**
-- Implemented since baseline:
-	- Alarm-trigger gate (`src/uil/agent/trigger.py`) — perfect on the 26-case `eval_CPD` set;
-	  wired into both `Orchestrator.run_from_alarm` and `LangGraphAgent.run_from_alarm`.
-	- CableLabs plant data-package topology parser (`plant_topology.py`) generalized to the
-	  `components[]` + `edges[]` format (validated on both real sample files + synthetic shapes).
-	- Passive-aware localizer: common point can be a splitter/tap/coupler (`PlantDeviceRef`).
-	- `getAllAmpsInSegment`/localize accept a real topology doc (`Scenario.topology_doc`).
-	- Tamper-evident, daily-rotated audit trace persistence (`trace_store.py`), on by default.
-	- SLM evaluation harness (`src/uil/eval/`): seeded random scenarios with independent
-	  ground truth + a rubric grader; gemma4 scores 27/27 on the CPD suite (see
-	  `docs/architecture/evaluation-harness.md`).
-- Next focus:
-	- CNN integration behind `analyzeSpectrumMeasurements` (owned separately; 5-184 MHz / dBuV).
-	- Align MCP schemas/output models with the current extracted shared contract, especially
-	  passive refs, handle-vs-inline localization evidence, and `getAllAmpsInSegment` fields.
-	- Adopt the 211 coherent scenario overlays for full-plant e2e tests and replace topology
-	  fixtures with the declared example/test plants.
-	- Validate the extracted in-process/HTTP adapters and FastMCP server against current `main`.
-	- C4 alarm transport and passive-node output policy remain open (see open-decisions).
 
 Execution tracker: `EXECUTION_STEPS.md`.
