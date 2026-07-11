@@ -40,8 +40,9 @@ def show(name: str, res) -> None:
         loc = res.localization
         print(f"  impairment={loc['impairmentType']} status={loc['localizationStatus']} "
               f"confidence={loc['confidence']}")
-        if loc.get("likelySourceLocation"):
-            print("  source:", loc["likelySourceLocation"]["description"])
+        if loc.get("candidateLocations"):
+            top = loc["candidateLocations"][0]
+            print("  source:", top.get("description") or top.get("locationType"))
     if res.handoff_markdown:
         print("  [human handoff artifact generated]")
 

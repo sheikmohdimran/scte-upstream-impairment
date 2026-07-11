@@ -112,8 +112,8 @@ class Orchestrator:
         amp_list_ref = r3["ampListRef"]
 
         # --- Step 4: measure all amp spectra (tolerate partial_success) ---
-        r4 = self.s.getAmpSpectrumMeasurements(ampListRef=amp_list_ref)
-        trace.add(tool="getAmpSpectrumMeasurements", arguments={"ampListRef": amp_list_ref},
+        r4 = self.s.getAmpUpstreamSpectrumMeasurements(ampListRef=amp_list_ref)
+        trace.add(tool="getAmpUpstreamSpectrumMeasurements", arguments={"ampListRef": amp_list_ref},
                   result=r4, outcome=r4.get("status", "error"),
                   decision="Capture spectra at all amp legs at once via the list handle.")
         if r4.get("status") not in {"success", "partial_success"}:
@@ -183,8 +183,9 @@ def _demo() -> None:
         loc = result.localization
         print(f"impairment: {loc.get('impairmentType')} | localizationStatus: {loc.get('localizationStatus')} "
               f"| confidence: {loc.get('confidence')}")
-        if loc.get("likelySourceLocation"):
-            print("likely source:", loc["likelySourceLocation"]["description"])
+        if loc.get("candidateLocations"):
+            top = loc["candidateLocations"][0]
+            print("top candidate:", top.get("description") or top.get("locationType"))
     if result.handoff_markdown:
         print("\n--- HUMAN HANDOFF ---\n" + result.handoff_markdown)
     print("\n--- TRACE (Step 8) ---")

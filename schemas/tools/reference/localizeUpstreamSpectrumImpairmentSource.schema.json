@@ -11,7 +11,8 @@
         "type": "string"
       },
       "impairmentType": {
-        "$ref": "../_defs.schema.json#/$defs/impairmentLabel"
+        "$ref": "../_defs.schema.json#/$defs/impairmentLabel",
+        "default": "CPD"
       },
       "classificationSetRefs": {
         "type": "array",
@@ -25,7 +26,6 @@
     "required": [
       "rpdId",
       "portId",
-      "impairmentType",
       "classificationSetRefs"
     ],
     "additionalProperties": false
@@ -48,31 +48,6 @@
               "low_confidence"
             ]
           },
-          "likelySourceLocation": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "locationType": {
-                "type": "string",
-                "enum": [
-                  "span",
-                  "device",
-                  "branch"
-                ]
-              },
-              "description": {
-                "type": "string"
-              },
-              "upstreamBoundaryDevice": {
-                "$ref": "../_defs.schema.json#/$defs/deviceRef"
-              },
-              "downstreamBoundaryDevice": {
-                "$ref": "../_defs.schema.json#/$defs/deviceRef"
-              }
-            }
-          },
           "confidence": {
             "type": "number",
             "minimum": 0,
@@ -80,6 +55,7 @@
           },
           "candidateLocations": {
             "type": "array",
+            "$comment": "Ordered by score, highest first.",
             "items": {
               "type": "object",
               "properties": {
@@ -91,13 +67,35 @@
                     "branch"
                   ]
                 },
-                "description": {
-                  "type": "string"
-                },
                 "score": {
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1
+                },
+                "upstreamBoundaryDevice": {
+                  "$ref": "../_defs.schema.json#/$defs/deviceRef"
+                },
+                "downstreamBoundaryDevices": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "../_defs.schema.json#/$defs/deviceRef"
+                  }
+                },
+                "supportingDevicesRef": {
+                  "type": "string",
+                  "description": "Handle the backend resolves to the list of devices whose spectrum classifications match the requested impairmentType, confirming the impairment is present at their location in the topology. The SLM passes the handle on instead of holding the device list inline."
+                },
+                "cleanBoundaryDevicesRef": {
+                  "type": "string",
+                  "description": "Handle the backend resolves to the list of devices classified as Clean, establishing locations in the topology beyond which the impairment is not observed. The SLM passes the handle on instead of holding the device list inline."
+                },
+                "uncertainDevicesRef": {
+                  "type": "string",
+                  "description": "Handle the backend resolves to the list of devices whose classifications had low confidence or did not clearly indicate either the requested impairmentType or Clean. The SLM passes the handle on instead of holding the device list inline."
+                },
+                "description": {
+                  "type": "string"
                 },
                 "reason": {
                   "type": "string"
@@ -105,48 +103,11 @@
               },
               "required": [
                 "locationType",
-                "description",
-                "score"
+                "score",
+                "upstreamBoundaryDevice",
+                "downstreamBoundaryDevices"
               ]
             }
-          },
-          "supportingDevices": {
-            "type": "array",
-            "items": {
-              "$ref": "../_defs.schema.json#/$defs/deviceRef"
-            }
-          },
-          "cleanBoundaryDevices": {
-            "type": "array",
-            "items": {
-              "$ref": "../_defs.schema.json#/$defs/deviceRef"
-            }
-          },
-          "uncertainDevices": {
-            "type": "array",
-            "items": {
-              "$ref": "../_defs.schema.json#/$defs/deviceRef"
-            }
-          },
-          "recommendedNextAction": {
-            "type": "object",
-            "properties": {
-              "action": {
-                "type": "string"
-              },
-              "reason": {
-                "type": "string"
-              },
-              "targetDevices": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "action"
-            ]
           }
         },
         "required": [

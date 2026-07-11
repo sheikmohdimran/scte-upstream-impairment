@@ -1,5 +1,5 @@
 {
-  "name": "getAmpSpectrumMeasurements",
+  "name": "getAmpUpstreamSpectrumMeasurements",
   "description": "Raw output: per-port spectrum payloads plus per-device failures.",
   "outputSchema": {
     "oneOf": [

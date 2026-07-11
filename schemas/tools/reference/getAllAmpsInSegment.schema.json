@@ -25,25 +25,17 @@
           "status": {
             "const": "success"
           },
-          "segmentId": {
-            "type": "string"
-          },
           "ampListRef": {
             "type": "string",
-            "description": "Handle the backend resolves to the full amp list; pass to getAmpSpectrumMeasurements."
+            "description": "Handle the backend resolves to the full amp list; pass to getAmpUpstreamSpectrumMeasurements."
           },
           "ampCount": {
             "type": "integer",
             "minimum": 0
-          },
-          "topologyTimestamp": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
           "status",
-          "segmentId",
           "ampListRef",
           "ampCount"
         ]

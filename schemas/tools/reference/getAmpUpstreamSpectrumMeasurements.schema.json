@@ -1,5 +1,5 @@
 {
-  "name": "getAmpSpectrumMeasurements",
+  "name": "getAmpUpstreamSpectrumMeasurements",
   "description": "Capture upstream spectrum at every output port of the listed amplifiers.",
   "inputSchema": {
     "type": "object",

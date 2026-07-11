@@ -13,7 +13,7 @@
       },
       "measurementSetRef": {
         "type": "string",
-        "description": "Handle from getAmpSpectrumMeasurements; backend resolves it to the per-port measurement set. Use instead of measurementRefs for large batches."
+        "description": "Handle from getAmpUpstreamSpectrumMeasurements; backend resolves it to the per-port measurement set. Use instead of measurementRefs for large batches."
       }
     },
     "oneOf": [

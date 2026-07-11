@@ -72,8 +72,9 @@ for label, name in [
         print(f"  Detected  : {loc.get('impairmentType')}")
         print(f"  Status    : {loc.get('localizationStatus')}  "
               f"(confidence={loc.get('confidence')})")
-        if loc.get("likelySourceLocation"):
-            print(f"  Source    : {loc['likelySourceLocation']['description']}")
+        if loc.get("candidateLocations"):
+            top = loc["candidateLocations"][0]
+            print(f"  Source    : {top.get('description') or top.get('locationType')}")
     else:
         print(f"  Status    : {result.status}")
 

@@ -10,10 +10,13 @@ from uil.domain.spectrum import RawSpectrum, SpectrumTraces
 from uil.domain.refs import DeviceRef, MeasurementRef
 from uil.domain.classification import Classification, Observation
 from uil.domain.localization import (
+    BoundaryCandidate,
     CandidateLocation,
     LikelySourceLocation,
     LocalizationResult,
+    PublicLocalizationResult,
     RecommendedNextAction,
+    build_public_localization,
 )
 from uil.domain.errors import ErrorResponse
 
@@ -25,9 +28,12 @@ __all__ = [
     "MeasurementRef",
     "Classification",
     "Observation",
+    "BoundaryCandidate",
     "CandidateLocation",
     "LikelySourceLocation",
     "LocalizationResult",
+    "PublicLocalizationResult",
     "RecommendedNextAction",
+    "build_public_localization",
     "ErrorResponse",
 ]

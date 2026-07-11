@@ -19,8 +19,10 @@ import numpy as np
 from uil.classifier.cnn_classifier import CnnClassifier
 from uil.classifier.rule_classifier import RuleClassifier
 from uil.domain.labels import ImpairmentLabel
+from uil.domain.localization import build_public_localization
 from uil.domain.spectrum_sample import DeviceSpecification, ImpairmentType
 from uil.localizer.graph_localizer import GraphLocalizer, Topology
+from uil.localizer.plant_topology import InvalidRpdPortError
 from uil.mcp_server.handle_store import HandleStore
 from uil.sim.spectrum_sample_generator import SpectrumSampleGenerator, _LABEL_TO_IMPAIRMENT_TYPE
 from uil.sim.spectrum_simulator import SpectrumSimulator
@@ -165,20 +167,20 @@ class MockMcpServer:
         if self.scn.faults.topology_unavailable:
             return {"status": "error", "errorCode": "TOPOLOGY_UNAVAILABLE"}
         if self.scn.topology_doc is not None:
-            # Real CableLabs plant data-package: store the doc; localize parses it.
-            topo = Topology.from_data_package(rpdId, portId, self.scn.topology_doc)
+            try:
+                topo = Topology.from_data_package(rpdId, portId, self.scn.topology_doc)
+            except InvalidRpdPortError as exc:
+                return {"status": "error", "errorCode": "INVALID_RPD_PORT", "message": str(exc)}
             amp_count = len(topo.amp_ids)
             if amp_count == 0:
                 return {"status": "error", "errorCode": "EMPTY_SEGMENT"}
             amp_list_ref = self.store.put(
-                "amplist", {"rpdId": rpdId, "portId": portId, "doc": self.scn.topology_doc}
+                "amplist", {"rpdId": rpdId, "portId": portId, "ampIds": topo.amp_ids}
             )
             return {
                 "status": "success",
-                "segmentId": f"seg-{rpdId}-{portId}",
                 "ampListRef": amp_list_ref,
                 "ampCount": amp_count,
-                "topologyTimestamp": _now(),
             }
         if not self.scn.amps:
             return {"status": "error", "errorCode": "EMPTY_SEGMENT"}
@@ -187,26 +189,32 @@ class MockMcpServer:
             "children": a.get("children", []),
             "distanceFromRpdMeters": a.get("distanceFromRpdMeters"),
         } for a in self.scn.amps]
-        amp_list_ref = self.store.put("amplist", {"rpdId": rpdId, "portId": portId, "amps": amp_records})
+        amp_list_ref = self.store.put(
+            "amplist",
+            {
+                "rpdId": rpdId,
+                "portId": portId,
+                "ampIds": [a["ampId"] for a in amp_records],
+            },
+        )
         return {
             "status": "success",
-            "segmentId": f"seg-{rpdId}-{portId}",
             "ampListRef": amp_list_ref,
             "ampCount": len(amp_records),
-            "topologyTimestamp": _now(),
         }
 
     # ---- Tool 4 ---------------------------------------------------------
-    def getAmpSpectrumMeasurements(self, ampIds: list[str] | None = None, ampListRef: str | None = None,
-                                   numBins: int = 256, startFrequencyHz: int = 5_000_000,
-                                   stopFrequencyHz: int = 85_000_000) -> dict:
+    def getAmpUpstreamSpectrumMeasurements(self, ampIds: list[str] | None = None, ampListRef: str | None = None,
+                                           numBins: int = 256, startFrequencyHz: int = 5_000_000,
+                                           stopFrequencyHz: int = 85_000_000) -> dict:
         if (ampIds is None) == (ampListRef is None):
             return {"status": "error", "errorCode": "INVALID_AMP_LIST_REF",
                     "message": "exactly one of ampIds|ampListRef required"}
         if ampListRef is not None:
             if not self.store.has(ampListRef):
                 return {"status": "error", "errorCode": "INVALID_AMP_LIST_REF"}
-            ids = [a["ampId"] for a in self.store.get(ampListRef)["amps"]]
+            stored = self.store.get(ampListRef)
+            ids = list(stored.get("ampIds", []))
         else:
             ids = list(ampIds)  # type: ignore[arg-type]
 
@@ -248,6 +256,11 @@ class MockMcpServer:
             result["failedDevicesRef"] = self.store.put("failed", failed)
         return result
 
+    # Private compatibility alias for the pre-alignment tool name. The canonical MCP tool
+    # name is getAmpUpstreamSpectrumMeasurements; this shim keeps older callers working.
+    def getAmpSpectrumMeasurements(self, *args, **kwargs) -> dict:
+        return self.getAmpUpstreamSpectrumMeasurements(*args, **kwargs)
+
     # ---- Tool 6 ---------------------------------------------------------
     def localizeUpstreamSpectrumImpairmentSource(self, rpdId: str, portId: str, impairmentType: str,
                                                  classificationSetRefs: list[str]) -> dict:
@@ -261,25 +274,52 @@ class MockMcpServer:
         if not any(c.status == "impaired" for c in pooled):
             return {"status": "error", "errorCode": "NO_IMPAIRMENT_CONFIRMED"}
 
-        amp_records = None
-        topology_doc = None
-        for handle in self.store._data:  # find the topology we built in tool 3
-            if handle.startswith("amplist"):
-                stored = self.store.get(handle)
-                if "doc" in stored:
-                    topology_doc = stored["doc"]
-                else:
-                    amp_records = stored["amps"]
-                break
-        if topology_doc is not None:
-            topo = Topology.from_data_package(rpdId, portId, topology_doc)
-        elif amp_records is not None:
+        if self.scn.topology_doc is not None:
+            try:
+                topo = Topology.from_data_package(rpdId, portId, self.scn.topology_doc)
+            except InvalidRpdPortError as exc:
+                return {"status": "error", "errorCode": "TOPOLOGY_UNAVAILABLE", "message": str(exc)}
+        elif self.scn.amps:
+            amp_records = [{
+                "ampId": a["ampId"], "parentId": a.get("parentId"),
+                "children": a.get("children", []),
+                "distanceFromRpdMeters": a.get("distanceFromRpdMeters"),
+            } for a in self.scn.amps]
             topo = Topology.from_amp_list(rpdId, portId, amp_records)
         else:
             return {"status": "error", "errorCode": "TOPOLOGY_UNAVAILABLE"}
 
         result = self.localizer.localize(rpdId, portId, ImpairmentLabel(impairmentType), pooled, topo)
-        return result.model_dump(mode="json", exclude_none=True)
+        public = build_public_localization(rpdId, portId, result, self.store.put)
+        return public.model_dump(mode="json", exclude_none=True)
+
+    def resolve_localization(self, localization: dict | None) -> dict | None:
+        """Expand a public localization's evidence handles back into inline device lists.
+
+        The public tool output keeps supporting/clean/uncertain devices behind opaque
+        ``*Ref`` handles. A backend-side consumer (e.g. the eval harness/grader) can call
+        this to obtain the device ids for scoring; it does NOT change the wire output. The
+        resolved lists are merged to the top level under ``supportingDevices`` /
+        ``cleanBoundaryDevices`` / ``uncertainDevices``.
+        """
+        if not localization or localization.get("status") != "success":
+            return localization
+        resolved = dict(localization)
+        merged: dict[str, list] = {
+            "supportingDevices": [], "cleanBoundaryDevices": [], "uncertainDevices": [],
+        }
+        ref_to_key = {
+            "supportingDevicesRef": "supportingDevices",
+            "cleanBoundaryDevicesRef": "cleanBoundaryDevices",
+            "uncertainDevicesRef": "uncertainDevices",
+        }
+        for cand in localization.get("candidateLocations", []):
+            for ref_key, out_key in ref_to_key.items():
+                handle = cand.get(ref_key)
+                if handle and self.store.has(handle):
+                    merged[out_key].extend(self.store.get(handle))
+        resolved.update(merged)
+        return resolved
 
     # ---- Tool 7 ---------------------------------------------------------
     def getDeviceSpectrumSamples(self, devices: list[dict]) -> dict:

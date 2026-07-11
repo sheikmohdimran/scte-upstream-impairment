@@ -94,15 +94,36 @@ def test_analyze_tool_success_output_conforms(server) -> None:
 
 
 def test_amp_measurements_partial_success_contains_failed_refs(server) -> None:
-    schema = _load(SCHEMA_DIR / "reference" / "getAmpSpectrumMeasurements.schema.json")["outputSchema"]
+    schema = _load(SCHEMA_DIR / "reference" / "getAmpUpstreamSpectrumMeasurements.schema.json")["outputSchema"]
     amps = server.getAllAmpsInSegment("RPD-1", "P1")
     # Force a partial-success path by failing one known amp.
     server.scn.faults.amp_failed_ports = {"A4"}
-    out = server.getAmpSpectrumMeasurements(ampListRef=amps["ampListRef"])
+    out = server.getAmpUpstreamSpectrumMeasurements(ampListRef=amps["ampListRef"])
     Draft202012Validator(schema, resolver=_defs_resolver()).validate(out)
     assert out["status"] == "partial_success"
     assert out["failedCount"] == 1
     assert "failedDevicesRef" in out
+
+
+def test_localize_tool_success_output_conforms(server) -> None:
+    """The public localize output must match the CableLabs reference contract:
+    per-candidate upstream/downstream boundary devices with evidence behind *Ref handles."""
+    schema = _load(SCHEMA_DIR / "reference" / "localizeUpstreamSpectrumImpairmentSource.schema.json")["outputSchema"]
+    rpd = server.getRPDSpectrumMeasurements("RPD-1", "P1")
+    rpd_cls = server.analyzeSpectrumMeasurements(measurementRefs=[rpd["measurementRef"]])
+    amps = server.getAllAmpsInSegment("RPD-1", "P1")
+    amp_meas = server.getAmpUpstreamSpectrumMeasurements(ampListRef=amps["ampListRef"])
+    amp_cls = server.analyzeSpectrumMeasurements(measurementSetRef=amp_meas["measurementSetRef"])
+    out = server.localizeUpstreamSpectrumImpairmentSource(
+        "RPD-1", "P1", "CPD", [rpd_cls["classificationSetRef"], amp_cls["classificationSetRef"]]
+    )
+    Draft202012Validator(schema, resolver=_defs_resolver()).validate(out)
+    assert out["status"] == "success"
+    cand = out["candidateLocations"][0]
+    assert "upstreamBoundaryDevice" in cand and cand["downstreamBoundaryDevices"]
+    # Evidence is behind opaque handles, never inline device arrays.
+    assert "supportingDevices" not in cand
+    assert cand.get("supportingDevicesRef")
 
 
 def test_reference_outputs_never_include_raw_spectrum_arrays(server) -> None:

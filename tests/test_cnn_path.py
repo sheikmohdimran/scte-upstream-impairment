@@ -95,7 +95,7 @@ def test_cnn_path_t4_amp_measurements_store_snapshots_key() -> None:
     server  = _cnn_server()
     t1_out  = server.getRPDSpectrumMeasurements("RPD-1", "P1")
     t3_out  = server.getAllAmpsInSegment("RPD-1", "P1")
-    t4_out  = server.getAmpSpectrumMeasurements(ampListRef=t3_out["ampListRef"])
+    t4_out  = server.getAmpUpstreamSpectrumMeasurements(ampListRef=t3_out["ampListRef"])
     assert t4_out["status"] == "success"
     # Resolve measset and inspect each stored measurement
     meas_items = server.store.get(t4_out["measurementSetRef"])
@@ -163,7 +163,7 @@ def test_cnn_path_partial_success_amp_failure() -> None:
     )
     server = MockMcpServer(scenario, use_cnn_path=True)
     result = Orchestrator(server, scenario_name="cnn-partial").run()
-    t4 = next(c for c in result.trace.calls if c.tool == "getAmpSpectrumMeasurements")
+    t4 = next(c for c in result.trace.calls if c.tool == "getAmpUpstreamSpectrumMeasurements")
     assert t4.outcome == "partial_success"
     assert result.status != "failed"
 

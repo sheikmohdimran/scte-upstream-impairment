@@ -30,7 +30,7 @@ def test_happy_path_localizes_cpd() -> None:
 def test_partial_success_still_completes() -> None:
     res = Orchestrator(MockMcpServer(_scenario(amp_failed_ports={"A4"})), "partial").run()
     # A4 fails to measure but is on the clean branch; localization still proceeds.
-    amp_call = next(c for c in res.trace.calls if c.tool == "getAmpSpectrumMeasurements")
+    amp_call = next(c for c in res.trace.calls if c.tool == "getAmpUpstreamSpectrumMeasurements")
     assert amp_call.outcome == "partial_success"
     assert res.status in {"localized", "low_confidence"}
 

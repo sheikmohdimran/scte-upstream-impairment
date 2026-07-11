@@ -38,13 +38,21 @@ def build_handoff_summary(
             f"- impairmentType: `{localization.get('impairmentType', 'n/a')}`",
             f"- confidence: {localization.get('confidence', 'n/a')}",
         ]
-        likely = localization.get("likelySourceLocation")
-        if likely:
-            lines.append(f"- likely source: {likely.get('description')}")
-        uncertain = localization.get("uncertainDevices") or []
-        if uncertain:
-            ids = [d.get("ampId") for d in uncertain]
-            lines.append(f"- unmeasured / uncertain devices: {ids}")
+        candidates = localization.get("candidateLocations") or []
+        if candidates:
+            top = candidates[0]
+            up = top.get("upstreamBoundaryDevice") or {}
+            downs = top.get("downstreamBoundaryDevices") or []
+            up_id = up.get("rpdId") or up.get("ampId")
+            down_ids = [d.get("rpdId") or d.get("ampId") for d in downs]
+            desc = top.get("description") or top.get("locationType")
+            lines.append(f"- top candidate: {desc} (score {top.get('score', 'n/a')})")
+            lines.append(f"- boundary: upstream `{up_id}` -> downstream {down_ids}")
+            if top.get("uncertainDevicesRef"):
+                lines.append(
+                    f"- uncertain devices behind handle `{top['uncertainDevicesRef']}` "
+                    "(resolve backend-side for ids)"
+                )
 
     lines += [
         "",

@@ -27,7 +27,10 @@ from uil.mcp_server.server import FaultInjection, MockMcpServer, Scenario
 
 def _run(scenario: Scenario, use_cnn: bool = False):
     server = MockMcpServer(scenario, use_cnn_path=use_cnn)
-    return Orchestrator(server, scenario_name=scenario.rpdId).run()
+    result = Orchestrator(server, scenario_name=scenario.rpdId).run()
+    # Expand evidence handles back to inline lists so tests can assert on device ids.
+    result.localization = server.resolve_localization(result.localization)
+    return result
 
 
 def _scenario(rpd_label: ImpairmentLabel, amps: list[dict],
@@ -49,7 +52,7 @@ def test_single_amp_segment_fault_detected() -> None:
     assert result.status == "localized"
     loc = result.localization
     assert loc["localizationStatus"] == "localized"
-    assert loc["likelySourceLocation"]["locationType"] == "device"
+    assert loc["candidateLocations"][0]["locationType"] == "device"
 
 
 def test_single_amp_segment_clean() -> None:
@@ -100,7 +103,7 @@ def test_linear_chain_fault_at_end() -> None:
     ))
     assert result.status != "failed"
     if result.localization and result.localization["localizationStatus"] == "localized":
-        assert result.localization["likelySourceLocation"]["locationType"] == "device"
+        assert result.localization["candidateLocations"][0]["locationType"] == "device"
 
 
 # ── Topology 3: Wide star ──────────────────────────────────────────────────────
@@ -121,8 +124,8 @@ def test_wide_star_one_branch_impaired() -> None:
     assert result.status != "failed"
     if result.localization and result.localization["localizationStatus"] == "localized":
         loc = result.localization
-        assert loc["likelySourceLocation"]["locationType"] == "device"
-        assert loc["likelySourceLocation"]["downstreamBoundaryDevice"]["ampId"] == "A2"
+        assert loc["candidateLocations"][0]["locationType"] == "device"
+        assert loc["candidateLocations"][0]["downstreamBoundaryDevices"][0]["ampId"] == "A2"
 
 
 def test_wide_star_two_branches_impaired() -> None:
@@ -244,7 +247,7 @@ def test_linear_chain_partial_success_missing_middle_amp() -> None:
         ],
         faults=FaultInjection(amp_failed_ports={"A3"}),  # A3 unreachable
     ))
-    t4 = next(c for c in result.trace.calls if c.tool == "getAmpSpectrumMeasurements")
+    t4 = next(c for c in result.trace.calls if c.tool == "getAmpUpstreamSpectrumMeasurements")
     assert t4.outcome == "partial_success"
     # A3 missing → its status is uncertain → low_confidence
     assert result.status in {"localized", "low_confidence"}
@@ -263,7 +266,7 @@ def test_wide_star_partial_success_still_localizes() -> None:
         faults=FaultInjection(amp_failed_ports={"A4"}),
     ))
     assert result.status != "failed"
-    t4 = next(c for c in result.trace.calls if c.tool == "getAmpSpectrumMeasurements")
+    t4 = next(c for c in result.trace.calls if c.tool == "getAmpUpstreamSpectrumMeasurements")
     assert t4.outcome == "partial_success"
 
 
