@@ -121,6 +121,14 @@ make eval-slm PER=3 SEED=0
 # or: PYTHONPATH=src python3 examples/eval_slm.py --per-dimension 3 --seed 0 --verbose
 ```
 
+Test to run the offline suite, then the 56‑amp segment through the live SLM to confirm binding fixes the id‑hallucination.
+
+```
+python -m pytest -q 2>&1 | tail -4 && echo "=== 56-amp segment via live SLM (bound ids) ===" && SLM_BASE_URL=http://0.0.0.0:8000/v1 SLM_MODEL=google/gemma-4-E4B-it OPENAI_API_KEY=EMPTY UIL_TRACE_DISABLE=1 python examples/demo_real_plant_slm.py --port 1 --fault-amp 0000000214 2>&1 | grep -E "Scoped|tool calls|[0-9]\. get|[0-9]\. analyze|[0-9]\. localize|localizationStatus|top candidate|ORACLE"
+```
+
+
+
 ## 7. Output
 
 Per-case lines plus a per-dimension summary and an overall pass rate; failing cases print the
