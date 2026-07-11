@@ -45,13 +45,13 @@ different measurement sets.
 ```text
 1  getRPDSpectrumMeasurements(rpdId, portId)            -> measurementRef
 2  analyzeSpectrumMeasurements(measurementRefs=[ref])   -> classificationSetRef · RPD   (kept for step 6)
-3  getAllAmpsInSegment(rpdId, portId)                   -> ampListRef, ampCount, segmentId
-4  getAmpSpectrumMeasurements(ampListRef)               -> measurementSetRef  (may be partial_success)
+3  getAllAmpsInSegment(rpdId, portId)                   -> ampListRef, ampCount
+4  getAmpUpstreamSpectrumMeasurements(ampListRef)       -> measurementSetRef  (may be partial_success)
 5  analyzeSpectrumMeasurements(measurementSetRef)       -> classificationSetRef · amps
 6  localizeUpstreamSpectrumImpairmentSource(
-			 rpdId, portId, impairmentType,
-			 classificationSetRefs=[RPD set (2), amp set (5)]) -> localization + recommendedNextAction
-																													↻ recommendedNextAction may say "re-measure"
+			 rpdId, portId, impairmentType?=CPD,
+			 classificationSetRefs=[RPD set (2), amp set (5)]) -> candidateLocations[] (boundary devices + evidence handles)
+																							↻ orchestrator may re-measure on low_confidence / transient error
 ```
 
 ```mermaid
@@ -59,11 +59,11 @@ flowchart TD
 		A["1 getRPDSpectrumMeasurements"] -->|measurementRef| B["2 analyzeSpectrumMeasurements (RPD)"]
 		B -->|classificationSetRef · RPD| F
 		B --> C["3 getAllAmpsInSegment"]
-		C -->|ampListRef, ampCount| D["4 getAmpSpectrumMeasurements"]
+		C -->|ampListRef, ampCount| D["4 getAmpUpstreamSpectrumMeasurements"]
 		D -->|measurementSetRef / partial_success| E["5 analyzeSpectrumMeasurements (amps)"]
 		E -->|classificationSetRef · amps| F["6 localizeUpstreamSpectrumImpairmentSource"]
-		F -->|recommendedNextAction = re-measure| A
-		F -->|localized| G["Report: source span/device/branch + confidence"]
+		F -->|low_confidence / transient error| A
+		F -->|localized| G["Report: candidate boundary devices + confidence"]
 		F -->|low_confidence / multi-anomaly| H["Hand off to human with summary"]
 ```
 
@@ -121,7 +121,7 @@ Per-tool error code enums (model as Literals so the orchestrator can branch):
 - getRPDSpectrumMeasurements: MEASUREMENT_UNAVAILABLE, DEVICE_UNREACHABLE, INVALID_RPD_PORT, STALE_DATA_ONLY, PERMISSION_DENIED
 - analyzeSpectrumMeasurements: CLASSIFICATION_FAILED, INVALID_MEASUREMENT_REF, MEASUREMENT_TOO_STALE, UNSUPPORTED_MEASUREMENT_TYPE, INSUFFICIENT_SIGNAL_QUALITY
 - getAllAmpsInSegment: TOPOLOGY_UNAVAILABLE, INVALID_RPD_PORT, EMPTY_SEGMENT, STALE_TOPOLOGY, PERMISSION_DENIED
-- getAmpSpectrumMeasurements: AMP_MEASUREMENTS_UNAVAILABLE, DEVICE_UNREACHABLE, INVALID_AMP_ID, INVALID_AMP_LIST_REF, TOO_MANY_DEVICES_REQUESTED, STALE_DATA_ONLY, PERMISSION_DENIED (+ partial_success with failedCount/failedDevicesRef)
+- getAmpUpstreamSpectrumMeasurements: AMP_MEASUREMENTS_UNAVAILABLE, DEVICE_UNREACHABLE, INVALID_AMP_ID, INVALID_AMP_LIST_REF, TOO_MANY_DEVICES_REQUESTED, STALE_DATA_ONLY, PERMISSION_DENIED (+ partial_success with failedCount/failedDevicesRef)
 - localizeUpstreamSpectrumImpairmentSource: INSUFFICIENT_LOCALIZATION_EVIDENCE, TOPOLOGY_UNAVAILABLE, INVALID_CLASSIFICATION_SET_REF (+invalidClassificationSetRefs[]), NO_IMPAIRMENT_CONFIRMED, CONFLICTING_CLASSIFICATIONS, UNSUPPORTED_IMPAIRMENT_TYPE
 
 ## 4. Components to build
@@ -162,11 +162,17 @@ Graph-theory common-point analysis over segment topology (amps[] with parentId/c
 distanceFromRpdMeters from getAllAmpsInSegment raw output):
 - Pool RPD + amp classifications (split by deviceType).
 - Find the common upstream point bounded by impaired-vs-clean devices.
-- Emit likelySourceLocation (span/device/branch), candidateLocations[],
-	supportingDevices[], cleanBoundaryDevices[], uncertainDevices[],
-	recommendedNextAction, and localizationStatus (localized | low_confidence).
+- Public output (aligned to CableLabs 2026-07-11): `candidateLocations[]`, each with
+	`upstreamBoundaryDevice` + plural `downstreamBoundaryDevices[]` and evidence behind
+	`supportingDevicesRef` / `cleanBoundaryDevicesRef` / `uncertainDevicesRef` handles, plus
+	`localizationStatus` (localized | low_confidence). The internal `GraphLocalizer` still computes
+	inline `likelySourceLocation`/evidence/`recommendedNextAction`; the server converts it to the
+	handle-backed public contract via `build_public_localization`.
 - Multi-anomaly/conflicting labels -> low_confidence or CONFLICTING_CLASSIFICATIONS ->
 	agent escalates to human with a summary.
+
+Representative validated shapes (synthetic, publishable) and their expected outcomes are
+documented in [architecture/validation-topologies.md](architecture/validation-topologies.md).
 
 ### 4.5 SLM orchestrator (src/agent/, LangGraph)
 
@@ -289,9 +295,10 @@ This addendum records how the plan above has been realized/adjusted.
 
 ### Confirmed by the 2026-06-12 design call
 - CableLabs will provide topology and is building the tool (Randy: "we'll have the topology
-  stuff"; Chai building it). Topology is delivered at runtime via `getAllAmpsInSegment` as a
-  DB-record handle, not preloaded into the operator/SLM. So **topology-present is the default
-  path**; `TOPOLOGY_UNAVAILABLE`/`STALE_TOPOLOGY`/`EMPTY_SEGMENT` are the exceptions.
+	stuff"; Chai building it). The extracted server confirms that topology is loaded as server
+	configuration and only the downstream amp-id list is stored behind `ampListRef`; the plant
+	graph is never sent to the SLM. So **topology-present is the default path**;
+	`TOPOLOGY_UNAVAILABLE`/`STALE_TOPOLOGY`/`EMPTY_SEGMENT` are exceptions.
 
 ### Workflow entry: alarm trigger (new, implemented)
 - `alarms.json` is an `eval_CPD` set of 26 labeled cases (positive/negative, with
@@ -324,20 +331,37 @@ This addendum records how the plan above has been realized/adjusted.
   root = `RfSource`; edges are downstream (reversed for upstream pathing); `RfAmp` = measured
   nodes; passives = common-point candidates; ports/cables collapsed (cable length -> distance);
   homes dropped. Generalized to the format (tested on both real files + synthetic shapes), not
-  the two samples. CableLabs bindings quarantined here (C1-C3).
-- Localizer now emits `PlantDeviceRef` when the common point is a passive device.
+	the two samples.
+- Extracted implementation confirms: `rpdId` identifies `RfSource`; `portId` is resolved to an
+	RPD-port node; the whole graph is loaded and tools scope internally to that port's descendants;
+	amp identity is component `id`.
+- **Contract mismatch:** our localizer may emit `PlantDeviceRef`, while the current shared
+	`deviceRef` contract permits only RPD/AMP. Their implementation keeps passive nodes structural
+	and emits RPD/AMP boundary refs. Resolve this before integrating the two localizers.
+
+### Reusable integration assets from `slm-main.zip`
+- FastMCP server with MCP + REST (`/execute`, `/diagnose`, health/readiness), in-process and HTTP
+	adapters that already satisfy our orchestrator interface, and Kubernetes deployment manifests.
+- Memory/Redis handle store with UUID refs, deep-copy semantics, and native TTL; separate
+	memory/VictoriaMetrics spectrum telemetry store.
+- 211 coherent scenario overlays over 9 example/test plants: `multi_branch` 137, `suspect` 24,
+	`single_boundary` 22, `all_impaired` 15, `common_element` 13. Seven deployment-only scenarios
+	add experimental intermittent/multi-fault/non-coherent cases.
+- Schema-derived OpenAI/vLLM tool specs and immutable content-hashed tool revisions for A/B
+	tests. Preserve authored JSON key order: their experiment observed 56% -> 48% accuracy after
+	sorting otherwise-equivalent tool JSON.
+- Integration caveats: their package pins this repo's old `impl-plan-2026-06-24` revision;
+	`graph-modeling-utils` is an unbundled internal dependency; non-MCP REST eval routes require
+	equivalent authentication before production exposure.
 
 ### Spectrum/CNN (owned separately)
 - Real captures: 5-184 MHz, 180 pts @1 MHz, amplitude **dBuV** (`raw_byte * 0.5`), maxhold-only,
   `rawValueHex` string. Simulator/CNN changes are handled by another owner; the interface seam
   is `analyzeSpectrumMeasurements`.
 
-### Open clarifications (see `docs/operations/open-decisions.md`)
-- **C1** `rpdId`/`portId` -> plant-graph binding (assume `RfSource`≈RPD, `portId` picks an
-  `RfPort` subtree).
-- **C2** Whole-plant vs pre-sliced per-segment subgraph at the tool boundary.
-- **C3** Amp identity = component `id` vs `name`.
-- **C4** Alarm transport (SNMP trap vs Kafka).
+### Remaining clarification (see `docs/operations/open-decisions.md`)
+- **C4** Alarm transport (SNMP trap vs Kafka) and alarm-field stability.
+- Decide passive-node output semantics and reconcile the two localizer policies/contracts.
 
 ### Status
-- 132 tests passing, 2 skipped.
+- 171 tests passing, 0 skipped.
